@@ -1,6 +1,7 @@
-import Dexie, { Table } from 'dexie';
-import { Account, Transaction, AuditLog } from './models';
-import { AccountingProfile } from './accountingProfile';
+import Dexie from 'dexie';
+import type { Table } from 'dexie';
+import type { Account, AuditLog, Transaction } from './models';
+import type { AccountingProfile } from './accountingProfile';
 
 export class AccountingDB extends Dexie {
   accounts!: Table<Account, string>;
