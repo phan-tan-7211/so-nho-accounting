@@ -8,6 +8,7 @@ import { DexieAccountingCutoverStore } from './dexieAccountingCutoverStore';
 import { projectDerivedCashBalances } from './derivedCashBalances';
 import { TransactionType } from './models';
 import type { AuditLog, Transaction } from './models';
+import { findPeriodLockCoveringTimestamp } from './periodLock';
 
 export type NewPostedTransactionInput = Omit<
   Transaction,
@@ -53,6 +54,16 @@ export class AccountingEngineService {
       if (!(await this.database.accounts.get(accountId))) {
         throw new Error(`Account ${accountId} not found`);
       }
+    }
+  }
+
+  private async assertTimestampUnlocked(timestamp: number, action: string): Promise<void> {
+    const locks = await this.database.periodLocks.where('status').equals('LOCKED').toArray();
+    const conflict = findPeriodLockCoveringTimestamp(locks, timestamp);
+    if (conflict) {
+      throw new Error(
+        `${action} is blocked because period ${conflict.periodStart}-${conflict.periodEnd} is locked`,
+      );
     }
   }
 
@@ -121,10 +132,13 @@ export class AccountingEngineService {
 
     return this.database.transaction(
       'rw',
-      this.database.accounts,
-      this.database.transactions,
-      this.database.auditLogs,
-      this.database.migrationStates,
+      [
+        this.database.accounts,
+        this.database.transactions,
+        this.database.auditLogs,
+        this.database.migrationStates,
+        this.database.periodLocks,
+      ],
       async () => {
         const migrationState = await this.database.migrationStates.get(
           LEGACY_OPENING_BALANCE_MIGRATION_ID,
@@ -133,6 +147,7 @@ export class AccountingEngineService {
           throw new Error('Accounting cutover state is missing');
         }
 
+        await this.assertTimestampUnlocked(newTx.date, 'Posting transaction');
         await this.assertCashEffectAccountsExist(effects);
         await this.database.transactions.add(newTx);
 
@@ -158,10 +173,13 @@ export class AccountingEngineService {
 
     return this.database.transaction(
       'rw',
-      this.database.accounts,
-      this.database.transactions,
-      this.database.auditLogs,
-      this.database.migrationStates,
+      [
+        this.database.accounts,
+        this.database.transactions,
+        this.database.auditLogs,
+        this.database.migrationStates,
+        this.database.periodLocks,
+      ],
       async () => {
         const migrationState = await this.database.migrationStates.get(
           LEGACY_OPENING_BALANCE_MIGRATION_ID,
@@ -180,6 +198,8 @@ export class AccountingEngineService {
           throw new Error('Reversal of a REVERSAL is not supported in V1');
         }
 
+        await this.assertTimestampUnlocked(original.date, 'Reversing transaction');
+
         const allTransactions = await this.database.transactions.toArray();
         const existingReversal = allTransactions.find(
           (candidate) =>
@@ -192,6 +212,7 @@ export class AccountingEngineService {
         }
 
         const now = Date.now();
+        await this.assertTimestampUnlocked(now, 'Creating reversal');
         const reversal: Transaction = {
           id: crypto.randomUUID(),
           date: now,

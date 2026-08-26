@@ -3,8 +3,17 @@ import type { FormEvent } from 'react';
 import { accountingProjectionService } from './accountingProjectionService';
 import { db } from './db';
 import { TaxType } from './models';
+import { periodLockService } from './periodLock';
+import type { PeriodLockRecord } from './periodLock';
 import { TaxOpeningPositionSchema, taxOpeningPositionId } from './taxOpeningPosition';
 import type { TaxOpeningPosition } from './taxOpeningPosition';
+import {
+  buildTt58ReportBundle,
+  canonicalReportJson,
+  parseTt58ReportBundle,
+  reportTableToCsv,
+} from './tt58ReportExport';
+import type { Tt58ReportBundle } from './tt58ReportExport';
 import { currentMonthInput, formatVnd, monthInputToPeriod } from './uiAccounting';
 
 type ProjectionResult = Awaited<ReturnType<typeof accountingProjectionService.buildTt58Projection>>;
@@ -18,7 +27,11 @@ function parseSignedVnd(value: string, label: string): number {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const tone = status === 'IMPLEMENTED' || status === 'COMPLETE' ? 'ready' : status === 'PLANNED' ? 'planned' : 'pending';
+  const tone = status === 'IMPLEMENTED' || status === 'COMPLETE' || status === 'LOCKED'
+    ? 'ready'
+    : status === 'PLANNED'
+      ? 'planned'
+      : 'pending';
   return <span className={`runtime-badge ${tone}`}>{status}</span>;
 }
 
@@ -117,37 +130,71 @@ function BookDetails({ result }: { result: ProjectionResult }) {
   );
 }
 
+function downloadText(filename: string, content: string, mime: string): void {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function previewReport(result: ProjectionResult | null, period: { start: number; end: number }): Tt58ReportBundle | null {
+  if (!result) return null;
+  try {
+    return buildTt58ReportBundle({
+      profile: result.profile,
+      capabilities: result.capabilities,
+      materializedBooks: result.materializedBooks,
+      period,
+    });
+  } catch {
+    return null;
+  }
+}
+
 export function BooksWorkspace() {
   const [month, setMonth] = useState(currentMonthInput());
   const [result, setResult] = useState<ProjectionResult | null>(null);
+  const [periodLock, setPeriodLock] = useState<PeriodLockRecord | null>(null);
+  const [lockedReport, setLockedReport] = useState<Tt58ReportBundle | null>(null);
   const [vatOpening, setVatOpening] = useState('0');
   const [incomeOpening, setIncomeOpening] = useState('0');
   const [loading, setLoading] = useState(true);
   const [savingOpening, setSavingOpening] = useState(false);
+  const [locking, setLocking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const period = useMemo(() => monthInputToPeriod(month), [month]);
+  const draftReport = useMemo(() => previewReport(result, period), [period, result]);
+  const activeExportReport = periodLock?.status === 'LOCKED' ? lockedReport : draftReport;
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [projection, vat, income] = await Promise.all([
+      const [projection, vat, income, lock] = await Promise.all([
         accountingProjectionService.buildTt58Projection({ start: period.start, end: period.end }),
         db.taxOpeningPositions.get(taxOpeningPositionId(TaxType.VAT, period.start)),
         db.taxOpeningPositions.get(taxOpeningPositionId(TaxType.INCOME_TAX, period.start)),
+        periodLockService.getPeriodLock(period),
       ]);
       setResult(projection);
       setVatOpening(String(vat?.amount ?? 0));
       setIncomeOpening(String(income?.amount ?? 0));
+      setPeriodLock(lock ?? null);
+      setLockedReport(lock?.status === 'LOCKED' ? parseTt58ReportBundle(lock.reportSnapshotJson) : null);
     } catch (caught) {
       setResult(null);
       setError(caught instanceof Error ? caught.message : 'Không thể dựng sổ TT58 cho kỳ này.');
     } finally {
       setLoading(false);
     }
-  }, [period.end, period.start]);
+  }, [period]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -180,7 +227,7 @@ export function BooksWorkspace() {
           updatedAt: now,
         }));
       }
-      await db.taxOpeningPositions.bulkPut(records);
+      await periodLockService.putTaxOpeningPositions(records);
       setMessage('Đã lưu số dư nghĩa vụ thuế đầu kỳ cho đúng kỳ báo cáo.');
       await load();
     } catch (caught) {
@@ -188,6 +235,57 @@ export function BooksWorkspace() {
     } finally {
       setSavingOpening(false);
     }
+  }
+
+  async function lockCurrentPeriod() {
+    setError(null);
+    setMessage(null);
+    setLocking(true);
+    try {
+      const locked = await periodLockService.lockPeriod(period);
+      setMessage(locked.alreadyLocked
+        ? 'Kỳ này đã được khóa; đang dùng snapshot đã lưu.'
+        : `Đã khóa kỳ và tạo snapshot báo cáo revision ${locked.state.revision}.`);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Không thể khóa kỳ.');
+    } finally {
+      setLocking(false);
+    }
+  }
+
+  async function unlockCurrentPeriod() {
+    if (!window.confirm('Mở khóa kỳ sẽ cho phép ghi/đảo giao dịch và sửa opening thuế trong kỳ. Tiếp tục?')) return;
+    setError(null);
+    setMessage(null);
+    setLocking(true);
+    try {
+      await periodLockService.unlockPeriod(period);
+      setMessage('Đã mở khóa kỳ. Lịch sử UNLOCK được giữ lại; snapshot khóa cũ không bị xóa.');
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Không thể mở khóa kỳ.');
+    } finally {
+      setLocking(false);
+    }
+  }
+
+  function exportJson(report: Tt58ReportBundle) {
+    const mode = periodLock?.status === 'LOCKED' ? 'locked' : 'draft';
+    downloadText(
+      `tt58-${month}-${mode}.json`,
+      `${canonicalReportJson(report)}\n`,
+      'application/json;charset=utf-8',
+    );
+  }
+
+  function exportCsv(table: Tt58ReportBundle['tables'][number]) {
+    const mode = periodLock?.status === 'LOCKED' ? 'locked' : 'draft';
+    downloadText(
+      `${table.code}-${month}-${mode}.csv`,
+      reportTableToCsv(table),
+      'text/csv;charset=utf-8',
+    );
   }
 
   return (
@@ -201,15 +299,49 @@ export function BooksWorkspace() {
         <label className="month-control"><span>Kỳ</span><input type="month" value={month} min="2026-07" onChange={(event) => setMonth(event.target.value)} /></label>
       </div>
 
+      <article className="workspace-card lock-card">
+        <div className="workspace-heading compact-heading">
+          <div>
+            <strong>Khóa kỳ & snapshot báo cáo</strong>
+            <small>Kỳ chỉ khóa được khi toàn bộ sổ bắt buộc đều IMPLEMENTED.</small>
+          </div>
+          <StatusBadge status={periodLock?.status ?? 'UNLOCKED'} />
+        </div>
+        {periodLock?.status === 'LOCKED' ? (
+          <p className="lock-copy">Revision {periodLock.revision} · khóa lúc {new Date(periodLock.lockedAt).toLocaleString('vi-VN')}. Export bên dưới luôn dùng snapshot đã khóa, không dùng dữ liệu live.</p>
+        ) : draftReport ? (
+          <p className="lock-copy">Dữ liệu hiện tại đủ điều kiện tạo report bundle. Có thể xuất bản nháp hoặc khóa kỳ để tạo snapshot chính thức.</p>
+        ) : (
+          <p className="lock-copy">Chưa thể khóa kỳ. Hãy xử lý các blocker của sổ bắt buộc bên dưới; sổ PLANNED như S2c sẽ chặn khóa fail-closed.</p>
+        )}
+        <div className="report-actions">
+          {periodLock?.status === 'LOCKED' ? (
+            <button className="secondary-button" type="button" disabled={locking} onClick={() => void unlockCurrentPeriod()}>{locking ? 'Đang xử lý…' : 'Mở khóa kỳ'}</button>
+          ) : (
+            <button className="primary-button compact" type="button" disabled={locking || !draftReport} onClick={() => void lockCurrentPeriod()}>{locking ? 'Đang khóa…' : 'Khóa kỳ'}</button>
+          )}
+          {activeExportReport ? <button className="secondary-button" type="button" onClick={() => exportJson(activeExportReport)}>Xuất JSON {periodLock?.status === 'LOCKED' ? 'snapshot' : 'nháp'}</button> : null}
+        </div>
+        {activeExportReport ? (
+          <div className="report-file-list">
+            {activeExportReport.tables.map((table) => (
+              <button className="report-file-button" type="button" key={table.code} onClick={() => exportCsv(table)}>
+                <strong>{table.code}.csv</strong><span>{table.title}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </article>
+
       <form className="workspace-card" onSubmit={saveOpenings}>
         <div className="workspace-heading compact-heading">
           <div><strong>Số dư nghĩa vụ thuế đầu kỳ</strong><small>Dương = phải nộp · Âm = được khấu trừ/hoàn</small></div>
         </div>
         <div className="form-grid two-columns">
-          <label><span>VAT đầu kỳ</span><input inputMode="numeric" value={vatOpening} onChange={(event) => setVatOpening(event.target.value)} /></label>
-          <label><span>Thuế thu nhập đầu kỳ</span><input inputMode="numeric" value={incomeOpening} onChange={(event) => setIncomeOpening(event.target.value)} /></label>
+          <label><span>VAT đầu kỳ</span><input inputMode="numeric" value={vatOpening} disabled={periodLock?.status === 'LOCKED'} onChange={(event) => setVatOpening(event.target.value)} /></label>
+          <label><span>Thuế thu nhập đầu kỳ</span><input inputMode="numeric" value={incomeOpening} disabled={periodLock?.status === 'LOCKED'} onChange={(event) => setIncomeOpening(event.target.value)} /></label>
         </div>
-        <button className="secondary-button" type="submit" disabled={savingOpening}>{savingOpening ? 'Đang lưu…' : 'Lưu opening thuế'}</button>
+        <button className="secondary-button" type="submit" disabled={savingOpening || periodLock?.status === 'LOCKED'}>{savingOpening ? 'Đang lưu…' : 'Lưu opening thuế'}</button>
       </form>
 
       {error ? <p className="form-alert error" role="alert">{error}</p> : null}

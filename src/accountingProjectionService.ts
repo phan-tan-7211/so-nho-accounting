@@ -3,6 +3,7 @@ import {
   runAccountingCutover,
 } from './accountingCutoverPersistence';
 import { AccountingProfileSchema } from './accountingProfile';
+import type { AccountingProfile } from './accountingProfile';
 import { projectAccountingDimensions } from './accountingProjections';
 import type { ProjectionPeriod } from './accountingProjections';
 import { db, type AccountingDB } from './db';
@@ -13,8 +14,66 @@ import {
 } from './tt58BookProjections';
 import { applyMaterializedBookReadiness } from './tt58CapabilityReadiness';
 import { materializeTt58Books } from './tt58MaterializedBooks';
+import type { OpeningEffectRecord } from './accountingCutoverPersistence';
+import type { Account, Transaction } from './models';
+import type { TaxOpeningPosition } from './taxOpeningPosition';
 import { projectTt58TaxSettlements } from './taxSettlement';
 import { finalizeTt58BooksWithTaxSettlement } from './tt58TaxSettledBooks';
+
+export interface Tt58ProjectionSnapshotInput {
+  profile: AccountingProfile;
+  accounts: readonly Account[];
+  transactions: readonly Transaction[];
+  openingEffects: readonly OpeningEffectRecord[];
+  legacyTransactionIds: readonly string[];
+  taxOpeningPositions: readonly TaxOpeningPosition[];
+  period: ProjectionPeriod;
+}
+
+export function buildTt58ProjectionFromSnapshot(input: Tt58ProjectionSnapshotInput) {
+  const projection = projectAccountingDimensions({
+    transactions: input.transactions,
+    legacyTransactionIds: input.legacyTransactionIds,
+    period: input.period,
+  });
+  const baseBooks = materializeTt58Books({
+    profile: input.profile,
+    projection,
+    accounts: input.accounts,
+    transactions: input.transactions,
+    openingEffects: input.openingEffects,
+    legacyTransactionIds: input.legacyTransactionIds,
+    period: input.period,
+  });
+  const taxSettlements = projectTt58TaxSettlements({
+    profile: input.profile,
+    projection,
+    transactions: input.transactions,
+    taxOpeningPositions: input.taxOpeningPositions,
+    materializedBooks: baseBooks,
+    period: input.period,
+  });
+  const materializedBooks = finalizeTt58BooksWithTaxSettlement({
+    profile: input.profile,
+    projection,
+    transactions: input.transactions,
+    books: baseBooks,
+    settlements: taxSettlements,
+  });
+  const capabilities = applyMaterializedBookReadiness(
+    getTt58BookCapabilities(input.profile),
+    materializedBooks,
+  );
+
+  return {
+    profile: input.profile,
+    capabilities,
+    projection,
+    activities: projectTt58CoreActivities(projection),
+    taxSettlements,
+    materializedBooks,
+  };
+}
 
 export class AccountingProjectionService {
   private readonly database: AccountingDB;
@@ -85,7 +144,6 @@ export class AccountingProjectionService {
         if (!rawProfile) throw new Error('TT58 accounting profile is not configured');
         const parsedProfile = AccountingProfileSchema.safeParse(rawProfile);
         if (!parsedProfile.success) throw new Error('Stored TT58 accounting profile is invalid');
-        const profile = parsedProfile.data;
 
         const [accounts, transactions, openingEffects, taxOpeningPositions] = await Promise.all([
           this.database.accounts.toArray(),
@@ -97,48 +155,15 @@ export class AccountingProjectionService {
           this.database.taxOpeningPositions.toArray(),
         ]);
 
-        const projection = projectAccountingDimensions({
-          transactions,
-          legacyTransactionIds: persistedState.legacyTransactionIds,
-          period,
-        });
-        const baseBooks = materializeTt58Books({
-          profile,
-          projection,
+        return buildTt58ProjectionFromSnapshot({
+          profile: parsedProfile.data,
           accounts,
           transactions,
           openingEffects,
           legacyTransactionIds: persistedState.legacyTransactionIds,
-          period,
-        });
-        const taxSettlements = projectTt58TaxSettlements({
-          profile,
-          projection,
-          transactions,
           taxOpeningPositions,
-          materializedBooks: baseBooks,
           period,
         });
-        const materializedBooks = finalizeTt58BooksWithTaxSettlement({
-          profile,
-          projection,
-          transactions,
-          books: baseBooks,
-          settlements: taxSettlements,
-        });
-        const capabilities = applyMaterializedBookReadiness(
-          getTt58BookCapabilities(profile),
-          materializedBooks,
-        );
-
-        return {
-          profile,
-          capabilities,
-          projection,
-          activities: projectTt58CoreActivities(projection),
-          taxSettlements,
-          materializedBooks,
-        };
       },
     );
   }

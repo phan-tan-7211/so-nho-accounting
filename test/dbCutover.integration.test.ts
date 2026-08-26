@@ -68,7 +68,7 @@ afterEach(async () => {
 const describeIndexedDb = process.env.CI === 'true' ? describe : describe.skip;
 
 describeIndexedDb('Dexie accounting cutover integration', () => {
-  it('upgrades V2 to V4 additively, preserves records, persists cutover, and reopens idempotently', async () => {
+  it('upgrades V2 to V5 additively, preserves records, persists cutover, and reopens idempotently', async () => {
     const name = nextDatabaseName();
     const legacy = new LegacyV2DB(name);
     const originalAccount = account(1_200);
@@ -102,12 +102,14 @@ describeIndexedDb('Dexie accounting cutover integration', () => {
     const upgraded = new AccountingDB(name);
     await upgraded.open();
 
-    expect(upgraded.verno).toBe(4);
+    expect(upgraded.verno).toBe(5);
     expect(await upgraded.accounts.get(CASH_ID)).toEqual(originalAccount);
     expect(await upgraded.transactions.get(TX_ID)).toEqual(originalTransaction);
     expect(await upgraded.auditLogs.get(AUDIT_ID)).toEqual(audit);
     expect(await upgraded.accountingProfiles.get('primary')).toEqual(profile);
     expect(await upgraded.taxOpeningPositions.count()).toBe(0);
+    expect(await upgraded.periodLocks.count()).toBe(0);
+    expect(await upgraded.periodLockEvents.count()).toBe(0);
 
     const first = await runAccountingCutover(new DexieAccountingCutoverStore(upgraded));
     expect(first.status).toBe('APPLIED');
@@ -132,6 +134,8 @@ describeIndexedDb('Dexie accounting cutover integration', () => {
     expect(await reopened.openingEffects.count()).toBe(1);
     expect(await reopened.migrationStates.count()).toBe(1);
     expect(await reopened.taxOpeningPositions.count()).toBe(0);
+    expect(await reopened.periodLocks.count()).toBe(0);
+    expect(await reopened.periodLockEvents.count()).toBe(0);
     reopened.close();
   });
 
