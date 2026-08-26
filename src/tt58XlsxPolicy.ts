@@ -1,16 +1,17 @@
+import { TT58_INVENTORY_VALUATION_METHOD } from './inventory';
 import type { Tt58ReportBundle } from './tt58ReportExport';
 
 /**
- * A locked XLSX is presented as a finalized TT58-formatted accounting output.
- * S2c is intentionally blocked for now: the current inventory subledger stores
- * explicit unit cost per movement, while TT58 S2c prescribes a period-average
- * outbound unit-price formula. We must not silently recalculate or relabel the
- * locked accounting snapshot merely for export.
+ * Locked XLSX output must only use an S2c snapshot whose valuation method is
+ * explicitly recorded as the TT58 period-average implementation. Legacy locked
+ * snapshots remain fail-closed and must be unlocked/relocked sequentially.
  */
 export function assertLockedTt58XlsxCompatibility(bundle: Tt58ReportBundle): void {
-  if (bundle.tables.some((table) => table.code === 'S2c-DNSN')) {
+  const hasS2c = bundle.tables.some((table) => table.code === 'S2c-DNSN');
+  if (!hasS2c) return;
+  if (bundle.inventoryValuation?.method !== TT58_INVENTORY_VALUATION_METHOD) {
     throw new Error(
-      'Chưa thể xuất XLSX S2c từ kỳ đã khóa: TT58 quy định đơn giá xuất kho theo bình quân của tồn đầu kỳ và nhập trong kỳ, trong khi inventory V1 đang lưu đơn giá movement explicit. Hãy dùng XLSX nháp/CSV để đối chiếu; cần nâng valuation domain trước khi phát hành S2c locked XLSX.',
+      'Chưa thể xuất XLSX S2c từ snapshot khóa cũ: snapshot chưa ghi nhận valuation TT58_PERIOD_AVERAGE_V1. Hãy mở khóa và khóa lại kỳ theo thứ tự thời gian để tái lập S2c bằng bình quân kỳ TT58.',
     );
   }
 }
