@@ -4,6 +4,7 @@ import { db } from './db';
 import { analyzeHistoricalS2cRelockPlan } from './historicalRelock';
 import type { HistoricalRelockPlan } from './historicalRelock';
 import { periodLockService } from './periodLock';
+import { RELEASE_CHANNEL, RELEASE_DATE, RELEASE_VERSION } from './releaseInfo';
 import { buildTt58ReportBundle, parseTt58ReportBundle } from './tt58ReportExport';
 import type { Tt58ReportBundle } from './tt58ReportExport';
 import { openTt58PrintWindow } from './tt58Print';
@@ -103,7 +104,7 @@ export function ReleaseTools() {
       <div className="workspace-heading compact-heading">
         <div>
           <strong id="release-tools-title">Release candidate · đối chiếu & in/PDF</strong>
-          <small>Bản in dùng cùng report bundle với XLSX; kỳ khóa dùng snapshot bất biến.</small>
+          <small>{RELEASE_VERSION} · {RELEASE_CHANNEL} · {RELEASE_DATE}. Bản in dùng cùng report bundle với XLSX; kỳ khóa dùng snapshot bất biến.</small>
         </div>
         <span className={`runtime-badge ${online ? 'ready' : 'pending'}`}>{online ? 'ONLINE' : 'OFFLINE'}</span>
       </div>
@@ -112,6 +113,7 @@ export function ReleaseTools() {
       <input id="release-period" type="month" value={month} min="2026-07" onChange={(event) => setMonth(event.target.value)} />
 
       <div className="release-runtime-grid">
+        <div><span>Version</span><strong>{RELEASE_VERSION}</strong></div>
         <div><span>Report</span><strong>{loading ? 'Đang kiểm tra…' : report ? (locked ? 'LOCKED SNAPSHOT' : 'DRAFT') : 'BLOCKED'}</strong></div>
         <div><span>Service Worker</span><strong>{serviceWorkerSupported ? 'SUPPORTED' : 'UNAVAILABLE'}</strong></div>
         <div><span>S2c history</span><strong>{plan.hasBlockingHistory ? 'CẦN RELOCK' : 'OK'}</strong></div>
