@@ -1,13 +1,16 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
 import { db } from './db';
 import {
   ACCOUNTING_REGIME_INFO,
-  AccountingProfile,
   AccountingProfileSchema,
-  AccountingRegime,
   ENTITY_TYPE_LABELS,
-  EntityType,
   getAllowedEntityTypes,
+} from './accountingProfile';
+import type {
+  AccountingProfile,
+  AccountingRegime,
+  EntityType,
 } from './accountingProfile';
 import './AccountingSettings.css';
 
@@ -92,8 +95,8 @@ export function AccountingSettings() {
       entityType,
       dataStartDate,
       taxProfileConfigured: identityChanged ? false : (profile?.taxProfileConfigured ?? false),
-      vatMethod: identityChanged ? 'UNCONFIGURED' as const : (profile?.vatMethod ?? 'UNCONFIGURED' as const),
-      incomeTaxMethod: identityChanged ? 'UNCONFIGURED' as const : (profile?.incomeTaxMethod ?? 'UNCONFIGURED' as const),
+      vatMethod: identityChanged ? 'UNCONFIGURED' : (profile?.vatMethod ?? 'UNCONFIGURED'),
+      incomeTaxMethod: identityChanged ? 'UNCONFIGURED' : (profile?.incomeTaxMethod ?? 'UNCONFIGURED'),
       createdAt: profile?.createdAt ?? now,
       updatedAt: now,
     };
