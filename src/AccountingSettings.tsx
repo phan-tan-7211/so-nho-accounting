@@ -9,6 +9,7 @@ import {
   EntityType,
   getAllowedEntityTypes,
 } from './accountingProfile';
+import './AccountingSettings.css';
 
 const selectableRegimes: AccountingRegime[] = [
   'TT152_2025_HKD',
