@@ -47,6 +47,8 @@ export const AccountingProfileSchema = z.object({
   regime: AccountingRegimeSchema,
   entityType: EntityTypeSchema,
   dataStartDate: z.string().regex(DATE_ONLY, 'Ngày bắt đầu phải có định dạng YYYY-MM-DD'),
+  entityName: z.string().trim().max(200).optional(),
+  entityAddress: z.string().trim().max(500).optional(),
   taxProfileConfigured: z.boolean().default(false),
   vatMethod: VatMethodSchema.default('UNCONFIGURED'),
   incomeTaxMethod: IncomeTaxMethodSchema.default('UNCONFIGURED'),
@@ -65,18 +67,18 @@ export const AccountingProfileSchema = z.object({
   const incomeTaxConfigured = profile.incomeTaxMethod !== 'UNCONFIGURED';
 
   if (!profile.taxProfileConfigured) {
-    if (vatConfigured || incomeTaxConfigured) {
+    if (vatConfigured || incomeConfigured) {
       ctx.addIssue({
         code: 'custom',
         path: ['taxProfileConfigured'],
         message: 'Khi hồ sơ thuế chưa xác nhận, cả hai phương pháp thuế phải ở trạng thái chưa cấu hình',
       });
     }
-  } else if (!vatConfigured || !incomeTaxConfigured) {
+  } else if (!vatConfigured || !incomeConfigured) {
     ctx.addIssue({
       code: 'custom',
       path: ['taxProfileConfigured'],
-      message: 'Cần chọn đầy đủ phương pháp thuế GTGT và thuế thu nhập trước khi xác nhận hồ sơ thuế',
+      message: 'Cần chọn đầy đủ phương pháp thuế GTGT và phương pháp thuế thu nhập trước khi xác nhận hồ sơ thuế',
     });
   }
 });
