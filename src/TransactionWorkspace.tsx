@@ -90,15 +90,21 @@ export function TransactionWorkspace({
   }, []);
 
   useEffect(() => {
-    void reload().catch(() => setError('Không thể đọc dữ liệu giao dịch.'));
+    const timer = window.setTimeout(() => {
+      void reload().catch(() => setError('Không thể đọc dữ liệu giao dịch.'));
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [reload]);
 
   useEffect(() => {
     if (!requestedType || requestToken === undefined) return;
-    setDraft({ ...createEmptyTransactionDraft(), type: requestedType });
-    setShowForm(true);
-    setError(null);
-    setMessage(null);
+    const timer = window.setTimeout(() => {
+      setDraft({ ...createEmptyTransactionDraft(), type: requestedType });
+      setShowForm(true);
+      setError(null);
+      setMessage(null);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [requestToken, requestedType]);
 
   const requirements = useMemo(() => getTransactionFormRequirements(draft.type), [draft.type]);
