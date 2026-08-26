@@ -17,6 +17,7 @@ import type {
   Tt58S2dBook,
   Tt58S3bBook,
 } from './tt58MaterializedBooks';
+import type { Tt58S4aBook, Tt58S4bBook, Tt58S4cBook, Tt58S4dBook } from './tt58Supplementary';
 
 export interface Tt58SettledRevenueTaxBook extends Omit<Tt58RevenueTaxBook, 'status'> {
   status: Tt58MaterializationStatus;
@@ -41,6 +42,10 @@ export interface Tt58FinalMaterializedBooks {
   s2d?: Tt58S2dBook;
   s3a?: Tt58SettledRevenueTaxBook;
   s3b?: Tt58SettledS3bBook;
+  s4a?: Tt58S4aBook;
+  s4b?: Tt58S4bBook;
+  s4c?: Tt58S4cBook;
+  s4d?: Tt58S4dBook;
 }
 
 export interface FinalizeTt58BooksInput {
