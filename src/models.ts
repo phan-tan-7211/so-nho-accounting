@@ -1,13 +1,14 @@
 import { z } from 'zod';
 
-export enum TransactionType {
-  INCOME = 'INCOME',
-  EXPENSE = 'EXPENSE',
-  TRANSFER = 'TRANSFER',
-  CAPITAL_CONTRIBUTION = 'CAPITAL_CONTRIBUTION',
-  REFUND = 'REFUND',
-  ADJUSTMENT = 'ADJUSTMENT'
-}
+export const TransactionType = {
+  INCOME: 'INCOME',
+  EXPENSE: 'EXPENSE',
+  TRANSFER: 'TRANSFER',
+  CAPITAL_CONTRIBUTION: 'CAPITAL_CONTRIBUTION',
+  REFUND: 'REFUND',
+  ADJUSTMENT: 'ADJUSTMENT',
+} as const;
+export type TransactionType = typeof TransactionType[keyof typeof TransactionType];
 
 export const AccountSchema = z.object({
   id: z.string().uuid(),
