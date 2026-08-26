@@ -1,19 +1,17 @@
 /** @vitest-environment jsdom */
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./PwaStatus', () => ({ PwaStatus: () => null }));
 vi.mock('./AccountingSettings', () => ({ AccountingSettings: () => <div>Cài đặt test</div> }));
 vi.mock('./BooksWorkspace', () => ({ BooksWorkspace: () => <div>Sổ sách test</div> }));
-vi.mock('./OverviewDashboard', () => ({
-  OverviewDashboard: () => <div>Tổng quan test</div>,
-}));
-vi.mock('./TransactionWorkspace', () => ({
-  TransactionWorkspace: () => <div>Giao dịch test</div>,
-}));
+vi.mock('./OverviewDashboard', () => ({ OverviewDashboard: () => <div>Tổng quan test</div> }));
+vi.mock('./TransactionWorkspace', () => ({ TransactionWorkspace: () => <div>Giao dịch test</div> }));
 
 import App from './App';
+
+afterEach(cleanup);
 
 describe('App release stabilization interactions', () => {
   it('focuses the first quick action and closes the sheet with Escape', async () => {
