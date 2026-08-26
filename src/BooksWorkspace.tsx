@@ -17,6 +17,7 @@ import {
 } from './tt58ReportExport';
 import type { Tt58ReportBundle } from './tt58ReportExport';
 import { buildTt58Xlsx, tt58XlsxFilename } from './tt58Xlsx';
+import { assertLockedTt58XlsxCompatibility } from './tt58XlsxPolicy';
 import { currentMonthInput, formatVnd, monthInputToPeriod } from './uiAccounting';
 
 type ProjectionResult = Awaited<ReturnType<typeof accountingProjectionService.buildTt58Projection>>;
@@ -159,7 +160,9 @@ function downloadText(filename: string, content: string, mime: string): void {
 }
 
 function downloadBytes(filename: string, content: Uint8Array, mime: string): void {
-  const blob = new Blob([content], { type: mime });
+  const buffer = new ArrayBuffer(content.byteLength);
+  new Uint8Array(buffer).set(content);
+  const blob = new Blob([buffer], { type: mime });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -295,6 +298,7 @@ export function BooksWorkspace() {
     setError(null);
     try {
       const locked = periodLock?.status === 'LOCKED';
+      if (locked) assertLockedTt58XlsxCompatibility(report);
       const bytes = buildTt58Xlsx(report, { draft: !locked });
       downloadBytes(
         tt58XlsxFilename(month, locked),
@@ -325,7 +329,7 @@ export function BooksWorkspace() {
         {periodLock?.status === 'LOCKED' ? (
           <p className="lock-copy">Revision {periodLock.revision} · khóa lúc {new Date(periodLock.lockedAt).toLocaleString('vi-VN')}. Export bên dưới luôn dùng snapshot đã khóa, không dùng dữ liệu live.</p>
         ) : draftReport ? (
-          <p className="lock-copy">Dữ liệu hiện tại đủ điều kiện tạo report bundle. Có thể xuất bản nháp hoặc khóa kỳ để tạo snapshot chính thức.</p>
+          <p className="lock-copy">Dữ liệu hiện tại đủ điều kiện tạo report bundle. Có thể xuất bản nháp hoặc khóa kỳ để tạo snapshot.</p>
         ) : (
           <p className="lock-copy">Chưa thể khóa kỳ. Hãy xử lý các blocker của sổ bắt buộc bên dưới.</p>
         )}
@@ -336,8 +340,11 @@ export function BooksWorkspace() {
             <button className="primary-button compact" type="button" disabled={locking || !draftReport} onClick={() => void lockCurrentPeriod()}>{locking ? 'Đang khóa…' : 'Khóa kỳ'}</button>
           )}
           {activeExportReport ? <button className="secondary-button" type="button" onClick={() => exportJson(activeExportReport)}>Xuất JSON {periodLock?.status === 'LOCKED' ? 'snapshot' : 'nháp'}</button> : null}
-          {activeExportReport ? <button className="secondary-button" type="button" onClick={() => exportXlsx(activeExportReport)}>Xuất XLSX {periodLock?.status === 'LOCKED' ? 'chính thức' : 'nháp'}</button> : null}
+          {activeExportReport ? <button className="secondary-button" type="button" onClick={() => exportXlsx(activeExportReport)}>Xuất XLSX TT58 {periodLock?.status === 'LOCKED' ? 'từ snapshot khóa' : 'nháp'}</button> : null}
         </div>
+        {periodLock?.status === 'LOCKED' && activeExportReport?.tables.some((table) => table.code === 'S2c-DNSN') ? (
+          <p className="lock-copy">Lưu ý: XLSX locked có S2c sẽ bị chặn ở Phase 13 vì TT58 yêu cầu đơn giá xuất kho bình quân kỳ; inventory V1 hiện vẫn dùng đơn giá movement explicit. CSV/snapshot không bị thay đổi.</p>
+        ) : null}
         {activeExportReport ? <div className="report-file-list">{activeExportReport.tables.map((table) => (
           <button className="report-file-button" type="button" key={table.code} onClick={() => exportCsv(table)}><strong>{table.code}.csv</strong><span>{table.title}</span></button>
         ))}</div> : null}
