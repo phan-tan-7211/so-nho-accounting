@@ -32,7 +32,7 @@ export function AccountingSettings() {
   const [legacyProfileDetected, setLegacyProfileDetected] = useState(false);
 
   const [entityType, setEntityType] = useState<EntityType>('MICRO_ENTERPRISE');
-  const [dataStartDate, setDataStartDate] = useState(TT58_EFFECTIVE_FROM);
+  const [dataStartDate, setDataStartDate] = useState<string>(TT58_EFFECTIVE_FROM);
   const [vatMethod, setVatMethod] = useState<VatMethod>('UNCONFIGURED');
   const [incomeTaxMethod, setIncomeTaxMethod] = useState<IncomeTaxMethod>('UNCONFIGURED');
 
