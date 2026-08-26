@@ -19,22 +19,17 @@ function bookForCode(
   code: Tt58BookCapability['code'],
 ): MaterializedBook | undefined {
   switch (code) {
-    case 'S1-DNSN':
-      return books.s1;
-    case 'S2a-DNSN':
-      return books.s2a;
-    case 'S2b-DNSN':
-      return books.s2b;
-    case 'S2c-DNSN':
-      return 's2c' in books ? books.s2c : undefined;
-    case 'S2d-DNSN':
-      return books.s2d;
-    case 'S3a-DNSN':
-      return books.s3a;
-    case 'S3b-DNSN':
-      return books.s3b;
-    default:
-      return undefined;
+    case 'S1-DNSN': return books.s1;
+    case 'S2a-DNSN': return books.s2a;
+    case 'S2b-DNSN': return books.s2b;
+    case 'S2c-DNSN': return 's2c' in books ? books.s2c : undefined;
+    case 'S2d-DNSN': return books.s2d;
+    case 'S3a-DNSN': return books.s3a;
+    case 'S3b-DNSN': return books.s3b;
+    case 'S4a-DNSN': return 's4a' in books ? books.s4a : undefined;
+    case 'S4b-DNSN': return 's4b' in books ? books.s4b : undefined;
+    case 'S4c-DNSN': return 's4c' in books ? books.s4c : undefined;
+    case 'S4d-DNSN': return 's4d' in books ? books.s4d : undefined;
   }
 }
 
