@@ -1,10 +1,23 @@
 import { z } from 'zod';
 
 export const TransactionType = {
-  INCOME: 'INCOME',
-  EXPENSE: 'EXPENSE',
+  // V1 semantic transaction types. New accounting code should use these values.
+  CASH_SALE: 'CASH_SALE',
+  CREDIT_SALE: 'CREDIT_SALE',
+  CUSTOMER_PAYMENT: 'CUSTOMER_PAYMENT',
+  CASH_PURCHASE: 'CASH_PURCHASE',
+  CREDIT_PURCHASE: 'CREDIT_PURCHASE',
+  SUPPLIER_PAYMENT: 'SUPPLIER_PAYMENT',
   TRANSFER: 'TRANSFER',
   CAPITAL_CONTRIBUTION: 'CAPITAL_CONTRIBUTION',
+  CUSTOMER_REFUND: 'CUSTOMER_REFUND',
+  SUPPLIER_REFUND: 'SUPPLIER_REFUND',
+  REVERSAL: 'REVERSAL',
+
+  // Legacy values remain readable so existing IndexedDB records are preserved.
+  // They must not be silently reinterpreted by the new accounting-effects core.
+  INCOME: 'INCOME',
+  EXPENSE: 'EXPENSE',
   REFUND: 'REFUND',
   ADJUSTMENT: 'ADJUSTMENT',
 } as const;
@@ -13,7 +26,7 @@ export type TransactionType = typeof TransactionType[keyof typeof TransactionTyp
 export const AccountSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1),
-  balance: z.number().default(0), // Cached balance
+  balance: z.number().default(0), // Legacy cached balance; not the future source of truth.
   createdAt: z.number(),
 });
 export type Account = z.infer<typeof AccountSchema>;
@@ -23,17 +36,18 @@ export const TransactionSchema = z.object({
   date: z.number(), // Timestamp
   amount: z.number().min(0),
   type: z.nativeEnum(TransactionType),
-  
+
   // Relationships
   sourceAccountId: z.string().uuid().optional(),
   destinationAccountId: z.string().uuid().optional(),
   categoryId: z.string().uuid().optional(),
   partnerId: z.string().uuid().optional(),
-  
+  reversalOfTransactionId: z.string().uuid().optional(),
+
   description: z.string().optional(),
   notes: z.string().optional(),
-  
-  // VAT
+
+  // VAT. `amount` is the gross amount for semantic sale/purchase/refund events.
   amountBeforeVat: z.number().optional(),
   vatRate: z.number().optional(),
   vatAmount: z.number().optional(),
