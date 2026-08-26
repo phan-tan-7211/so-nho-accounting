@@ -144,7 +144,7 @@ describeIndexedDb('TT58 period lock integration', () => {
     database.close();
   });
 
-  it('fails closed when a required TT58 book is still planned', async () => {
+  it('fails closed when required TT58 books are not all implemented', async () => {
     const database = new AccountingDB(nextDatabaseName());
     await database.open();
     await database.accounts.put(account());
@@ -155,7 +155,7 @@ describeIndexedDb('TT58 period lock integration', () => {
     });
 
     const locks = new PeriodLockService(database);
-    await expect(locks.lockPeriod(PERIOD)).rejects.toThrow(/S2c-DNSN is PLANNED/);
+    await expect(locks.lockPeriod(PERIOD)).rejects.toThrow(/Cannot finalize TT58 report/);
     expect(await database.periodLocks.count()).toBe(0);
     expect(await database.periodLockEvents.count()).toBe(0);
 
