@@ -8,6 +8,7 @@ import { buildTt58ReportBundle, parseTt58ReportBundle } from './tt58ReportExport
 import type { Tt58ReportBundle } from './tt58ReportExport';
 import { openTt58PrintWindow } from './tt58Print';
 import { currentMonthInput, monthInputToPeriod } from './uiAccounting';
+import './ReleaseTools.css';
 
 function monthLabel(timestamp: number): string {
   return new Intl.DateTimeFormat('vi-VN', { month: '2-digit', year: 'numeric' }).format(new Date(timestamp));
