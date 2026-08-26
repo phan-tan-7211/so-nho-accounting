@@ -1,10 +1,14 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import './Stabilization.css'
 import App from './App.tsx'
+import { AppErrorBoundary } from './AppErrorBoundary.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
   </StrictMode>,
 )
