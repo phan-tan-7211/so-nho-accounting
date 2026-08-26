@@ -9,6 +9,7 @@ import {
 } from './accountingProjectionService';
 import { db, type AccountingDB } from './db';
 import { DexieAccountingCutoverStore } from './dexieAccountingCutoverStore';
+import { findPriorInventoryValuation } from './inventoryValuationSnapshot';
 import type { TaxOpeningPosition } from './taxOpeningPosition';
 import {
   buildTt58ReportBundle,
@@ -141,6 +142,7 @@ export class PeriodLockService {
           inventoryItems,
           inventoryOpenings,
           inventoryMovements,
+          lockedPeriods,
         ] = await Promise.all([
           this.database.accounts.toArray(),
           this.database.transactions.toArray(),
@@ -149,6 +151,7 @@ export class PeriodLockService {
           this.database.inventoryItems.toArray(),
           this.database.inventoryOpenings.toArray(),
           this.database.inventoryMovements.toArray(),
+          this.database.periodLocks.where('status').equals('LOCKED').toArray(),
         ]);
 
         const projection = buildTt58ProjectionFromSnapshot({
@@ -161,6 +164,7 @@ export class PeriodLockService {
           inventoryItems,
           inventoryOpenings,
           inventoryMovements,
+          priorInventoryValuation: findPriorInventoryValuation(lockedPeriods, period),
           period,
         });
         const report = buildTt58ReportBundle({
