@@ -10,6 +10,8 @@ import {
   Tt58ExpenseCategory,
 } from './models';
 import type { Account, Transaction, TransactionType as TransactionTypeValue } from './models';
+import { partnerSupportsTransaction } from './partners';
+import type { Partner } from './partners';
 import {
   TRANSACTION_TYPE_LABELS,
   UI_TRANSACTION_TYPES,
@@ -69,6 +71,7 @@ export function TransactionWorkspace({
   requestToken?: number;
 }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [partners, setPartners] = useState<Partner[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [profile, setProfile] = useState<AccountingProfile | null>(null);
   const [draft, setDraft] = useState<TransactionFormDraft>(() => createEmptyTransactionDraft());
@@ -78,12 +81,14 @@ export function TransactionWorkspace({
   const [message, setMessage] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    const [storedAccounts, storedTransactions, rawProfile] = await Promise.all([
+    const [storedAccounts, storedPartners, storedTransactions, rawProfile] = await Promise.all([
       db.accounts.orderBy('name').toArray(),
+      db.partners.orderBy('code').toArray(),
       db.transactions.orderBy('date').reverse().toArray(),
       db.accountingProfiles.get('primary'),
     ]);
     setAccounts(storedAccounts);
+    setPartners(storedPartners);
     setTransactions(storedTransactions);
     const parsed = rawProfile ? AccountingProfileSchema.safeParse(rawProfile) : null;
     setProfile(parsed?.success ? parsed.data : null);
@@ -108,6 +113,10 @@ export function TransactionWorkspace({
   }, [requestToken, requestedType]);
 
   const requirements = useMemo(() => getTransactionFormRequirements(draft.type), [draft.type]);
+  const partnerOptions = useMemo(
+    () => partners.filter((partner) => partner.active && partnerSupportsTransaction(partner, draft.type)),
+    [draft.type, partners],
+  );
 
   function patch(values: Partial<TransactionFormDraft>) {
     setDraft((current) => ({ ...current, ...values }));
@@ -167,7 +176,7 @@ export function TransactionWorkspace({
           <div className="form-grid two-columns">
             <label>
               <span>Loại giao dịch</span>
-              <select value={draft.type} onChange={(event) => patch({ type: event.target.value as TransactionTypeValue })}>
+              <select value={draft.type} onChange={(event) => patch({ type: event.target.value as TransactionTypeValue, partnerId: '' })}>
                 {UI_TRANSACTION_TYPES.map((type) => <option key={type} value={type}>{TRANSACTION_TYPE_LABELS[type]}</option>)}
               </select>
             </label>
@@ -205,9 +214,12 @@ export function TransactionWorkspace({
 
           {requirements.partner ? (
             <label>
-              <span>Partner ID</span>
-              <input value={draft.partnerId} onChange={(event) => patch({ partnerId: event.target.value })} placeholder="UUID khách hàng / nhà cung cấp" />
-              <small>V1 chưa có danh mục partner; ID được nhập explicit, không suy đoán.</small>
+              <span>Khách hàng / nhà cung cấp</span>
+              <select value={draft.partnerId} onChange={(event) => patch({ partnerId: event.target.value })}>
+                <option value="">Chọn partner</option>
+                {partnerOptions.map((partner) => <option key={partner.id} value={partner.id}>{partner.code} · {partner.name}</option>)}
+              </select>
+              <small>{partnerOptions.length === 0 ? 'Chưa có partner phù hợp. Hãy tạo trong Cài đặt.' : 'Engine kiểm tra lại partner tồn tại, active và đúng vai trò khi POST.'}</small>
             </label>
           ) : null}
 

@@ -8,6 +8,7 @@ import { DexieAccountingCutoverStore } from './dexieAccountingCutoverStore';
 import { projectDerivedCashBalances } from './derivedCashBalances';
 import { TransactionType } from './models';
 import type { AuditLog, Transaction } from './models';
+import { partnerSupportsTransaction } from './partners';
 import { findPeriodLockCoveringTimestamp } from './periodLock';
 
 export type NewPostedTransactionInput = Omit<
@@ -54,6 +55,16 @@ export class AccountingEngineService {
       if (!(await this.database.accounts.get(accountId))) {
         throw new Error(`Account ${accountId} not found`);
       }
+    }
+  }
+
+  private async assertPartnerUsable(transaction: Transaction): Promise<void> {
+    if (!transaction.partnerId) return;
+    const partner = await this.database.partners.get(transaction.partnerId);
+    if (!partner) throw new Error(`Partner ${transaction.partnerId} not found`);
+    if (!partner.active) throw new Error(`Partner ${partner.code} is inactive`);
+    if (!partnerSupportsTransaction(partner, transaction.type)) {
+      throw new Error(`Partner ${partner.code} is incompatible with transaction ${transaction.type}`);
     }
   }
 
@@ -138,6 +149,7 @@ export class AccountingEngineService {
         this.database.auditLogs,
         this.database.migrationStates,
         this.database.periodLocks,
+        this.database.partners,
       ],
       async () => {
         const migrationState = await this.database.migrationStates.get(
@@ -149,6 +161,7 @@ export class AccountingEngineService {
 
         await this.assertTimestampUnlocked(newTx.date, 'Posting transaction');
         await this.assertCashEffectAccountsExist(effects);
+        await this.assertPartnerUsable(newTx);
         await this.database.transactions.add(newTx);
 
         const log: AuditLog = {

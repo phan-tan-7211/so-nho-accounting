@@ -9,6 +9,7 @@ import type {
 import type { TaxOpeningPosition } from './taxOpeningPosition';
 import type { PeriodLockEvent, PeriodLockRecord } from './periodLock';
 import type { InventoryItem, InventoryMovement, InventoryOpening } from './inventory';
+import type { Partner } from './partners';
 
 export class AccountingDB extends Dexie {
   accounts!: Table<Account, string>;
@@ -23,6 +24,7 @@ export class AccountingDB extends Dexie {
   inventoryItems!: Table<InventoryItem, string>;
   inventoryOpenings!: Table<InventoryOpening, string>;
   inventoryMovements!: Table<InventoryMovement, string>;
+  partners!: Table<Partner, string>;
 
   constructor(name = 'AccountingDB') {
     super(name);
@@ -71,9 +73,6 @@ export class AccountingDB extends Dexie {
       periodLockEvents: 'id, periodLockId, action, revision, timestamp',
     });
 
-    // V6 adds an explicit inventory subledger. It does not infer any historical
-    // stock or valuation method; each item has an explicit opening position and
-    // each movement carries its own quantity and VND unit cost.
     this.version(6).stores({
       accounts: 'id, name',
       transactions: 'id, date, type, sourceAccountId, destinationAccountId, status',
@@ -87,6 +86,26 @@ export class AccountingDB extends Dexie {
       inventoryItems: 'id, &code, name',
       inventoryOpenings: 'id, &itemId, effectiveDate',
       inventoryMovements: 'id, itemId, date, direction, transactionId, reversalOfMovementId, status',
+    });
+
+    // V7 is additive and replaces free-form partner UUID entry with a durable
+    // customer/supplier master. Existing transactions remain untouched; their
+    // partnerId values are validated at runtime/report diagnostics instead of
+    // being silently rewritten during schema upgrade.
+    this.version(7).stores({
+      accounts: 'id, name',
+      transactions: 'id, date, type, sourceAccountId, destinationAccountId, status',
+      auditLogs: 'id, transactionId, timestamp',
+      accountingProfiles: 'id, regime, entityType, dataStartDate',
+      openingEffects: 'id, migrationId, migrationVersion, accountId, kind',
+      migrationStates: 'id, version',
+      taxOpeningPositions: 'id, taxType, periodStart',
+      periodLocks: 'id, status, periodStart, periodEnd, revision',
+      periodLockEvents: 'id, periodLockId, action, revision, timestamp',
+      inventoryItems: 'id, &code, name',
+      inventoryOpenings: 'id, &itemId, effectiveDate',
+      inventoryMovements: 'id, itemId, date, direction, transactionId, reversalOfMovementId, status',
+      partners: 'id, &code, name, kind, active',
     });
   }
 }

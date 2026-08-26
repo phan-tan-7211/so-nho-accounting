@@ -7,6 +7,7 @@ import { AccountingDB } from '../src/db';
 import { AccountingEngineService } from '../src/engine';
 import { TransactionType } from '../src/models';
 import type { Account, Transaction } from '../src/models';
+import { PartnerKind } from '../src/partners';
 
 const CASH_ID = '11111111-1111-4111-8111-111111111111';
 const CUSTOMER_ID = '33333333-3333-4333-8333-333333333333';
@@ -80,6 +81,15 @@ describeIndexedDb('AccountingProjectionService', () => {
   it('reads semantic effects from IndexedDB and returns required TT58 capabilities plus activity rows', async () => {
     const database = await openDatabase();
     await database.accountingProfiles.put(profile());
+    await database.partners.put({
+      id: CUSTOMER_ID,
+      code: 'KH-01',
+      name: 'Khách A',
+      kind: PartnerKind.CUSTOMER,
+      active: true,
+      createdAt: 1,
+      updatedAt: 1,
+    });
     const engine = new AccountingEngineService(database);
 
     await engine.processTransaction({
