@@ -16,6 +16,7 @@ import {
   reportTableToCsv,
 } from './tt58ReportExport';
 import type { Tt58ReportBundle } from './tt58ReportExport';
+import { buildTt58Xlsx, tt58XlsxFilename } from './tt58Xlsx';
 import { currentMonthInput, formatVnd, monthInputToPeriod } from './uiAccounting';
 
 type ProjectionResult = Awaited<ReturnType<typeof accountingProjectionService.buildTt58Projection>>;
@@ -157,6 +158,18 @@ function downloadText(filename: string, content: string, mime: string): void {
   URL.revokeObjectURL(url);
 }
 
+function downloadBytes(filename: string, content: Uint8Array, mime: string): void {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 function previewReport(result: ProjectionResult | null, period: { start: number; end: number }): Tt58ReportBundle | null {
   if (!result) return null;
   try {
@@ -278,6 +291,21 @@ export function BooksWorkspace() {
     downloadText(`${table.code}-${month}-${mode}.csv`, reportTableToCsv(table), 'text/csv;charset=utf-8');
   }
 
+  function exportXlsx(report: Tt58ReportBundle) {
+    setError(null);
+    try {
+      const locked = periodLock?.status === 'LOCKED';
+      const bytes = buildTt58Xlsx(report, { draft: !locked });
+      downloadBytes(
+        tt58XlsxFilename(month, locked),
+        bytes,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Không thể tạo file XLSX TT58.');
+    }
+  }
+
   return (
     <section className="workspace-stack" aria-labelledby="books-workspace-title">
       <div className="workspace-heading">
@@ -308,6 +336,7 @@ export function BooksWorkspace() {
             <button className="primary-button compact" type="button" disabled={locking || !draftReport} onClick={() => void lockCurrentPeriod()}>{locking ? 'Đang khóa…' : 'Khóa kỳ'}</button>
           )}
           {activeExportReport ? <button className="secondary-button" type="button" onClick={() => exportJson(activeExportReport)}>Xuất JSON {periodLock?.status === 'LOCKED' ? 'snapshot' : 'nháp'}</button> : null}
+          {activeExportReport ? <button className="secondary-button" type="button" onClick={() => exportXlsx(activeExportReport)}>Xuất XLSX {periodLock?.status === 'LOCKED' ? 'chính thức' : 'nháp'}</button> : null}
         </div>
         {activeExportReport ? <div className="report-file-list">{activeExportReport.tables.map((table) => (
           <button className="report-file-button" type="button" key={table.code} onClick={() => exportCsv(table)}><strong>{table.code}.csv</strong><span>{table.title}</span></button>
