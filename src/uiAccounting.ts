@@ -81,52 +81,64 @@ export const UI_TRANSACTION_TYPES: readonly TransactionTypeValue[] = [
   TransactionType.TAX_PAYMENT,
   TransactionType.TAX_REFUND,
   TransactionType.TAX_ASSESSMENT,
-] as const;
+];
+
+const UI_TRANSACTION_TYPE_SET = new Set<TransactionTypeValue>(UI_TRANSACTION_TYPES);
+const SOURCE_ACCOUNT_TYPES = new Set<TransactionTypeValue>([
+  TransactionType.CASH_PURCHASE,
+  TransactionType.SUPPLIER_PAYMENT,
+  TransactionType.TRANSFER,
+  TransactionType.CUSTOMER_REFUND,
+  TransactionType.TAX_PAYMENT,
+]);
+const DESTINATION_ACCOUNT_TYPES = new Set<TransactionTypeValue>([
+  TransactionType.CASH_SALE,
+  TransactionType.CUSTOMER_PAYMENT,
+  TransactionType.TRANSFER,
+  TransactionType.CAPITAL_CONTRIBUTION,
+  TransactionType.SUPPLIER_REFUND,
+  TransactionType.TAX_REFUND,
+]);
+const PARTNER_TYPES = new Set<TransactionTypeValue>([
+  TransactionType.CREDIT_SALE,
+  TransactionType.CUSTOMER_PAYMENT,
+  TransactionType.CREDIT_PURCHASE,
+  TransactionType.SUPPLIER_PAYMENT,
+]);
+const VAT_INVOICE_TYPES = new Set<TransactionTypeValue>([
+  TransactionType.CASH_SALE,
+  TransactionType.CREDIT_SALE,
+  TransactionType.CASH_PURCHASE,
+  TransactionType.CREDIT_PURCHASE,
+  TransactionType.CUSTOMER_REFUND,
+  TransactionType.SUPPLIER_REFUND,
+]);
+const REVENUE_METADATA_TYPES = new Set<TransactionTypeValue>([
+  TransactionType.CASH_SALE,
+  TransactionType.CREDIT_SALE,
+  TransactionType.CUSTOMER_REFUND,
+]);
+const EXPENSE_METADATA_TYPES = new Set<TransactionTypeValue>([
+  TransactionType.CASH_PURCHASE,
+  TransactionType.CREDIT_PURCHASE,
+  TransactionType.SUPPLIER_REFUND,
+]);
+const TAX_TYPE_INPUT_TYPES = new Set<TransactionTypeValue>([
+  TransactionType.TAX_PAYMENT,
+  TransactionType.TAX_REFUND,
+]);
 
 export function getTransactionFormRequirements(
   type: TransactionTypeValue,
 ): TransactionFormRequirements {
   return {
-    sourceAccount: [
-      TransactionType.CASH_PURCHASE,
-      TransactionType.SUPPLIER_PAYMENT,
-      TransactionType.TRANSFER,
-      TransactionType.CUSTOMER_REFUND,
-      TransactionType.TAX_PAYMENT,
-    ].includes(type),
-    destinationAccount: [
-      TransactionType.CASH_SALE,
-      TransactionType.CUSTOMER_PAYMENT,
-      TransactionType.TRANSFER,
-      TransactionType.CAPITAL_CONTRIBUTION,
-      TransactionType.SUPPLIER_REFUND,
-      TransactionType.TAX_REFUND,
-    ].includes(type),
-    partner: [
-      TransactionType.CREDIT_SALE,
-      TransactionType.CUSTOMER_PAYMENT,
-      TransactionType.CREDIT_PURCHASE,
-      TransactionType.SUPPLIER_PAYMENT,
-    ].includes(type),
-    vatInvoice: [
-      TransactionType.CASH_SALE,
-      TransactionType.CREDIT_SALE,
-      TransactionType.CASH_PURCHASE,
-      TransactionType.CREDIT_PURCHASE,
-      TransactionType.CUSTOMER_REFUND,
-      TransactionType.SUPPLIER_REFUND,
-    ].includes(type),
-    revenueTaxMetadata: [
-      TransactionType.CASH_SALE,
-      TransactionType.CREDIT_SALE,
-      TransactionType.CUSTOMER_REFUND,
-    ].includes(type),
-    expenseMetadata: [
-      TransactionType.CASH_PURCHASE,
-      TransactionType.CREDIT_PURCHASE,
-      TransactionType.SUPPLIER_REFUND,
-    ].includes(type),
-    taxType: [TransactionType.TAX_PAYMENT, TransactionType.TAX_REFUND].includes(type),
+    sourceAccount: SOURCE_ACCOUNT_TYPES.has(type),
+    destinationAccount: DESTINATION_ACCOUNT_TYPES.has(type),
+    partner: PARTNER_TYPES.has(type),
+    vatInvoice: VAT_INVOICE_TYPES.has(type),
+    revenueTaxMetadata: REVENUE_METADATA_TYPES.has(type),
+    expenseMetadata: EXPENSE_METADATA_TYPES.has(type),
+    taxType: TAX_TYPE_INPUT_TYPES.has(type),
     assessmentPeriod: type === TransactionType.TAX_ASSESSMENT,
   };
 }
@@ -204,7 +216,7 @@ export function createPostedTransactionInput(
   draft: TransactionFormDraft,
   profile: AccountingProfile | null,
 ): NewPostedTransactionInput {
-  if (!UI_TRANSACTION_TYPES.includes(draft.type)) throw new Error('Loại giao dịch không được hỗ trợ trong V1.');
+  if (!UI_TRANSACTION_TYPE_SET.has(draft.type)) throw new Error('Loại giao dịch không được hỗ trợ trong V1.');
   const requirements = getTransactionFormRequirements(draft.type);
   const amount = requiredVnd(
     draft.amount,
