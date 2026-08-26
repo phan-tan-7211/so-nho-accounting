@@ -23,10 +23,28 @@ export const TransactionType = {
 } as const;
 export type TransactionType = typeof TransactionType[keyof typeof TransactionType];
 
+export const AccountKind = {
+  CASH: 'CASH',
+  DEMAND_DEPOSIT: 'DEMAND_DEPOSIT',
+} as const;
+export type AccountKind = typeof AccountKind[keyof typeof AccountKind];
+
+export const Tt58ExpenseCategory = {
+  MATERIALS_GOODS_ENERGY: 'MATERIALS_GOODS_ENERGY',
+  LABOR: 'LABOR',
+  DEPRECIATION: 'DEPRECIATION',
+  OUTSIDE_SERVICES: 'OUTSIDE_SERVICES',
+  INTEREST: 'INTEREST',
+  OTHER_DIRECT_BUSINESS: 'OTHER_DIRECT_BUSINESS',
+} as const;
+export type Tt58ExpenseCategory =
+  typeof Tt58ExpenseCategory[keyof typeof Tt58ExpenseCategory];
+
 export const AccountSchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(1),
   balance: z.number().default(0), // Legacy cached balance; not the future source of truth.
+  kind: z.nativeEnum(AccountKind).optional(),
   createdAt: z.number(),
 });
 export type Account = z.infer<typeof AccountSchema>;
@@ -46,12 +64,21 @@ export const TransactionSchema = z.object({
 
   description: z.string().optional(),
   notes: z.string().optional(),
+  documentNumber: z.string().min(1).optional(),
 
   // VAT. `amount` is the gross amount for semantic sale/purchase/refund events.
   amountBeforeVat: z.number().optional(),
   vatRate: z.number().optional(),
   vatAmount: z.number().optional(),
   invoiceNumber: z.string().optional(),
+
+  // Explicit TT58 book metadata. These values are never inferred from VAT invoice
+  // rates, cash direction or generic categories.
+  taxActivityLabel: z.string().min(1).optional(),
+  vatRevenueRate: z.number().finite().min(0).max(100).optional(),
+  incomeTaxRevenueRate: z.number().finite().min(0).max(100).optional(),
+  vatDeductible: z.boolean().optional(),
+  tt58ExpenseCategory: z.nativeEnum(Tt58ExpenseCategory).optional(),
 
   status: z.enum(['DRAFT', 'POSTED', 'REVERSED']).default('POSTED'),
   createdAt: z.number(),
