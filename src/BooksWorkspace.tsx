@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { accountingProjectionService } from './accountingProjectionService';
 import { db } from './db';
+import { InventoryWorkspace } from './InventoryWorkspace';
+import { formatInventoryQuantity } from './inventory';
 import { TaxType } from './models';
 import { periodLockService } from './periodLock';
 import type { PeriodLockRecord } from './periodLock';
@@ -102,6 +104,19 @@ function BookDetails({ result }: { result: ProjectionResult }) {
         </article>
       ) : null}
 
+      {books.s2c ? (
+        <article className="workspace-card">
+          <div className="workspace-heading compact-heading"><strong>S2c-DNSN · Vật liệu, dụng cụ, sản phẩm, hàng hóa</strong><StatusBadge status={books.s2c.status} /></div>
+          {books.s2c.sections.length === 0 ? <p className="empty-copy">Không có item tồn kho trong kỳ.</p> : books.s2c.sections.map((section) => (
+            <div className="money-section" key={section.itemId}>
+              <div><strong>{section.itemCode} · {section.itemName}</strong><small>{section.unit}</small></div>
+              <span>{formatInventoryQuantity(section.openingQuantityMilli)} → <strong>{formatInventoryQuantity(section.closingQuantityMilli)}</strong></span>
+              <small>Giá trị {formatVnd(section.openingValueVnd)} → {formatVnd(section.closingValueVnd)} · Nhập {formatInventoryQuantity(section.inboundQuantityMilli)} · Xuất {formatInventoryQuantity(section.outboundQuantityMilli)}</small>
+            </div>
+          ))}
+        </article>
+      ) : null}
+
       {books.s3b ? (
         <article className="workspace-card">
           <div className="workspace-heading compact-heading"><strong>S3b-DNSN · VAT khấu trừ</strong><StatusBadge status={books.s3b.status} /></div>
@@ -172,6 +187,7 @@ export function BooksWorkspace() {
   const period = useMemo(() => monthInputToPeriod(month), [month]);
   const draftReport = useMemo(() => previewReport(result, period), [period, result]);
   const activeExportReport = periodLock?.status === 'LOCKED' ? lockedReport : draftReport;
+  const s2cRequired = result?.capabilities.some((capability) => capability.required && capability.code === 'S2c-DNSN') ?? false;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -197,9 +213,7 @@ export function BooksWorkspace() {
   }, [period]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void load();
-    }, 0);
+    const timer = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
 
@@ -211,20 +225,16 @@ export function BooksWorkspace() {
     try {
       const now = Date.now();
       const values: Array<[typeof TaxType.VAT | typeof TaxType.INCOME_TAX, string]> = [
-        [TaxType.VAT, vatOpening],
-        [TaxType.INCOME_TAX, incomeOpening],
+        [TaxType.VAT, vatOpening], [TaxType.INCOME_TAX, incomeOpening],
       ];
       const records: TaxOpeningPosition[] = [];
       for (const [taxType, raw] of values) {
         const id = taxOpeningPositionId(taxType, period.start);
         const existing = await db.taxOpeningPositions.get(id);
         records.push(TaxOpeningPositionSchema.parse({
-          id,
-          taxType,
-          periodStart: period.start,
+          id, taxType, periodStart: period.start,
           amount: parseSignedVnd(raw, taxType === TaxType.VAT ? 'VAT đầu kỳ' : 'Thuế thu nhập đầu kỳ'),
-          createdAt: existing?.createdAt ?? now,
-          updatedAt: now,
+          createdAt: existing?.createdAt ?? now, updatedAt: now,
         }));
       }
       await periodLockService.putTaxOpeningPositions(records);
@@ -232,60 +242,40 @@ export function BooksWorkspace() {
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không thể lưu số dư thuế đầu kỳ.');
-    } finally {
-      setSavingOpening(false);
-    }
+    } finally { setSavingOpening(false); }
   }
 
   async function lockCurrentPeriod() {
-    setError(null);
-    setMessage(null);
-    setLocking(true);
+    setError(null); setMessage(null); setLocking(true);
     try {
       const locked = await periodLockService.lockPeriod(period);
-      setMessage(locked.alreadyLocked
-        ? 'Kỳ này đã được khóa; đang dùng snapshot đã lưu.'
-        : `Đã khóa kỳ và tạo snapshot báo cáo revision ${locked.state.revision}.`);
+      setMessage(locked.alreadyLocked ? 'Kỳ này đã được khóa; đang dùng snapshot đã lưu.' : `Đã khóa kỳ và tạo snapshot báo cáo revision ${locked.state.revision}.`);
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không thể khóa kỳ.');
-    } finally {
-      setLocking(false);
-    }
+    } finally { setLocking(false); }
   }
 
   async function unlockCurrentPeriod() {
-    if (!window.confirm('Mở khóa kỳ sẽ cho phép ghi/đảo giao dịch và sửa opening thuế trong kỳ. Tiếp tục?')) return;
-    setError(null);
-    setMessage(null);
-    setLocking(true);
+    if (!window.confirm('Mở khóa kỳ sẽ cho phép ghi/đảo giao dịch, tồn kho và sửa opening thuế trong kỳ. Tiếp tục?')) return;
+    setError(null); setMessage(null); setLocking(true);
     try {
       await periodLockService.unlockPeriod(period);
       setMessage('Đã mở khóa kỳ. Lịch sử UNLOCK được giữ lại; snapshot khóa cũ không bị xóa.');
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không thể mở khóa kỳ.');
-    } finally {
-      setLocking(false);
-    }
+    } finally { setLocking(false); }
   }
 
   function exportJson(report: Tt58ReportBundle) {
     const mode = periodLock?.status === 'LOCKED' ? 'locked' : 'draft';
-    downloadText(
-      `tt58-${month}-${mode}.json`,
-      `${canonicalReportJson(report)}\n`,
-      'application/json;charset=utf-8',
-    );
+    downloadText(`tt58-${month}-${mode}.json`, `${canonicalReportJson(report)}\n`, 'application/json;charset=utf-8');
   }
 
   function exportCsv(table: Tt58ReportBundle['tables'][number]) {
     const mode = periodLock?.status === 'LOCKED' ? 'locked' : 'draft';
-    downloadText(
-      `${table.code}-${month}-${mode}.csv`,
-      reportTableToCsv(table),
-      'text/csv;charset=utf-8',
-    );
+    downloadText(`${table.code}-${month}-${mode}.csv`, reportTableToCsv(table), 'text/csv;charset=utf-8');
   }
 
   return (
@@ -301,10 +291,7 @@ export function BooksWorkspace() {
 
       <article className="workspace-card lock-card">
         <div className="workspace-heading compact-heading">
-          <div>
-            <strong>Khóa kỳ & snapshot báo cáo</strong>
-            <small>Kỳ chỉ khóa được khi toàn bộ sổ bắt buộc đều IMPLEMENTED.</small>
-          </div>
+          <div><strong>Khóa kỳ & snapshot báo cáo</strong><small>Kỳ chỉ khóa được khi toàn bộ sổ bắt buộc đều IMPLEMENTED.</small></div>
           <StatusBadge status={periodLock?.status ?? 'UNLOCKED'} />
         </div>
         {periodLock?.status === 'LOCKED' ? (
@@ -312,7 +299,7 @@ export function BooksWorkspace() {
         ) : draftReport ? (
           <p className="lock-copy">Dữ liệu hiện tại đủ điều kiện tạo report bundle. Có thể xuất bản nháp hoặc khóa kỳ để tạo snapshot chính thức.</p>
         ) : (
-          <p className="lock-copy">Chưa thể khóa kỳ. Hãy xử lý các blocker của sổ bắt buộc bên dưới; sổ PLANNED như S2c sẽ chặn khóa fail-closed.</p>
+          <p className="lock-copy">Chưa thể khóa kỳ. Hãy xử lý các blocker của sổ bắt buộc bên dưới.</p>
         )}
         <div className="report-actions">
           {periodLock?.status === 'LOCKED' ? (
@@ -322,27 +309,21 @@ export function BooksWorkspace() {
           )}
           {activeExportReport ? <button className="secondary-button" type="button" onClick={() => exportJson(activeExportReport)}>Xuất JSON {periodLock?.status === 'LOCKED' ? 'snapshot' : 'nháp'}</button> : null}
         </div>
-        {activeExportReport ? (
-          <div className="report-file-list">
-            {activeExportReport.tables.map((table) => (
-              <button className="report-file-button" type="button" key={table.code} onClick={() => exportCsv(table)}>
-                <strong>{table.code}.csv</strong><span>{table.title}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
+        {activeExportReport ? <div className="report-file-list">{activeExportReport.tables.map((table) => (
+          <button className="report-file-button" type="button" key={table.code} onClick={() => exportCsv(table)}><strong>{table.code}.csv</strong><span>{table.title}</span></button>
+        ))}</div> : null}
       </article>
 
       <form className="workspace-card" onSubmit={saveOpenings}>
-        <div className="workspace-heading compact-heading">
-          <div><strong>Số dư nghĩa vụ thuế đầu kỳ</strong><small>Dương = phải nộp · Âm = được khấu trừ/hoàn</small></div>
-        </div>
+        <div className="workspace-heading compact-heading"><div><strong>Số dư nghĩa vụ thuế đầu kỳ</strong><small>Dương = phải nộp · Âm = được khấu trừ/hoàn</small></div></div>
         <div className="form-grid two-columns">
           <label><span>VAT đầu kỳ</span><input inputMode="numeric" value={vatOpening} disabled={periodLock?.status === 'LOCKED'} onChange={(event) => setVatOpening(event.target.value)} /></label>
           <label><span>Thuế thu nhập đầu kỳ</span><input inputMode="numeric" value={incomeOpening} disabled={periodLock?.status === 'LOCKED'} onChange={(event) => setIncomeOpening(event.target.value)} /></label>
         </div>
         <button className="secondary-button" type="submit" disabled={savingOpening || periodLock?.status === 'LOCKED'}>{savingOpening ? 'Đang lưu…' : 'Lưu opening thuế'}</button>
       </form>
+
+      {s2cRequired ? <InventoryWorkspace periodStart={period.start} locked={periodLock?.status === 'LOCKED'} /> : null}
 
       {error ? <p className="form-alert error" role="alert">{error}</p> : null}
       {message ? <p className="form-alert success" role="status">{message}</p> : null}
@@ -359,12 +340,7 @@ export function BooksWorkspace() {
               </article>
             ))}
           </div>
-
-          <div className="tax-summary-grid">
-            <TaxSummary label="VAT" summary={result.taxSettlements.vat} />
-            <TaxSummary label="Thuế thu nhập" summary={result.taxSettlements.incomeTax} />
-          </div>
-
+          <div className="tax-summary-grid"><TaxSummary label="VAT" summary={result.taxSettlements.vat} /><TaxSummary label="Thuế thu nhập" summary={result.taxSettlements.incomeTax} /></div>
           <BookDetails result={result} />
         </>
       ) : null}
