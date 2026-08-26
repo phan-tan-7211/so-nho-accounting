@@ -54,6 +54,7 @@ export interface InventoryS2cIssue {
   code:
     | 'MISSING_OPENING'
     | 'OPENING_AFTER_PERIOD_START'
+    | 'MOVEMENT_BEFORE_OPENING'
     | 'MISSING_ITEM'
     | 'MISSING_DOCUMENT_NUMBER'
     | 'NEGATIVE_QUANTITY'
@@ -206,7 +207,7 @@ export function projectInventoryS2c(input: ProjectInventoryS2cInput): InventoryS
   for (const item of input.items) {
     const opening = openingByItem.get(item.id);
     const movements = movementsByItem.get(item.id) ?? [];
-    if ((opening && opening.effectiveDate <= input.period.end) || movements.some((m) => m.date <= input.period.end)) {
+    if ((opening && opening.effectiveDate <= input.period.end) || movements.some((movement) => movement.date <= input.period.end)) {
       relevantIds.add(item.id);
     }
   }
@@ -236,6 +237,15 @@ export function projectInventoryS2c(input: ProjectInventoryS2cInput): InventoryS
 
     for (const movement of sorted) {
       if (movement.date >= input.period.start) break;
+      if (movement.date < opening.effectiveDate) {
+        issues.push({
+          code: 'MOVEMENT_BEFORE_OPENING',
+          message: `Item ${item.code} has movement ${movement.id} before its explicit opening date`,
+          itemId,
+          movementId: movement.id,
+        });
+        continue;
+      }
       const signed = signedMovement(movement);
       quantityBalance = addSafe(quantityBalance, signed.quantity, 'Inventory opening quantity');
       valueBalance = addSafe(valueBalance, signed.value, 'Inventory opening value');
@@ -253,6 +263,15 @@ export function projectInventoryS2c(input: ProjectInventoryS2cInput): InventoryS
 
     for (const movement of sorted) {
       if (movement.date < input.period.start || movement.date > input.period.end) continue;
+      if (movement.date < opening.effectiveDate) {
+        issues.push({
+          code: 'MOVEMENT_BEFORE_OPENING',
+          message: `Item ${item.code} has movement ${movement.id} before its explicit opening date`,
+          itemId,
+          movementId: movement.id,
+        });
+        continue;
+      }
       if (!movement.documentNumber) {
         issues.push({ code: 'MISSING_DOCUMENT_NUMBER', message: `S2c movement for item ${item.code} requires a document number`, itemId, movementId: movement.id });
       }
@@ -369,18 +388,33 @@ export class InventoryService {
       updatedAt: now,
     });
     await this.assertTimestampUnlocked(movement.date);
-    await this.database.transaction('rw', [this.database.inventoryItems, this.database.inventoryMovements, this.database.transactions, this.database.periodLocks], async () => {
-      await this.assertTimestampUnlocked(movement.date);
-      if (!(await this.database.inventoryItems.get(movement.itemId))) throw new Error(`Inventory item ${movement.itemId} not found`);
-      if (movement.transactionId) {
-        const tx = await this.database.transactions.get(movement.transactionId);
-        if (!tx) throw new Error(`Linked transaction ${movement.transactionId} not found`);
-        if (tx.status !== 'POSTED') throw new Error('Inventory movement can link only to a POSTED transaction');
-        const allowed = movement.direction === InventoryDirection.IN ? LINKED_IN_TYPES : LINKED_OUT_TYPES;
-        if (!allowed.has(tx.type)) throw new Error(`Transaction ${tx.type} is incompatible with inventory direction ${movement.direction}`);
-      }
-      await this.database.inventoryMovements.add(movement);
-    });
+    await this.database.transaction(
+      'rw',
+      [
+        this.database.inventoryItems,
+        this.database.inventoryOpenings,
+        this.database.inventoryMovements,
+        this.database.transactions,
+        this.database.periodLocks,
+      ],
+      async () => {
+        await this.assertTimestampUnlocked(movement.date);
+        if (!(await this.database.inventoryItems.get(movement.itemId))) throw new Error(`Inventory item ${movement.itemId} not found`);
+        const opening = await this.database.inventoryOpenings.get(inventoryOpeningId(movement.itemId));
+        if (!opening) throw new Error(`Inventory opening for item ${movement.itemId} not found`);
+        if (movement.date < opening.effectiveDate) {
+          throw new Error('Inventory movement date cannot be before the item opening date');
+        }
+        if (movement.transactionId) {
+          const tx = await this.database.transactions.get(movement.transactionId);
+          if (!tx) throw new Error(`Linked transaction ${movement.transactionId} not found`);
+          if (tx.status !== 'POSTED') throw new Error('Inventory movement can link only to a POSTED transaction');
+          const allowed = movement.direction === InventoryDirection.IN ? LINKED_IN_TYPES : LINKED_OUT_TYPES;
+          if (!allowed.has(tx.type)) throw new Error(`Transaction ${tx.type} is incompatible with inventory direction ${movement.direction}`);
+        }
+        await this.database.inventoryMovements.add(movement);
+      },
+    );
     return movement;
   }
 
