@@ -7,7 +7,11 @@ import type {
 import type { AccountingDB } from './db';
 
 export class DexieAccountingCutoverStore implements AccountingCutoverStore {
-  constructor(private readonly db: AccountingDB) {}
+  private readonly db: AccountingDB;
+
+  constructor(db: AccountingDB) {
+    this.db = db;
+  }
 
   async transaction<T>(
     operation: (tx: AccountingCutoverTransaction) => Promise<T>,
