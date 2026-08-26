@@ -57,14 +57,12 @@ afterEach(async () => {
 const describeIndexedDb = process.env.CI === 'true' ? describe : describe.skip;
 
 describeIndexedDb('Dexie accounting cutover integration', () => {
-  it('upgrades V2 to V7 additively, preserves records, persists cutover, and reopens idempotently', async () => {
+  it('upgrades V2 to V8 additively, preserves records, persists cutover, and creates empty supplementary stores', async () => {
     const name = nextDatabaseName();
     const legacy = new LegacyV2DB(name);
     const originalAccount = account(1_200);
     const originalTransaction = legacyIncome(200);
-    const audit: AuditLog = {
-      id: AUDIT_ID, transactionId: TX_ID, action: 'CREATE', timestamp: 2, details: 'legacy audit',
-    };
+    const audit: AuditLog = { id: AUDIT_ID, transactionId: TX_ID, action: 'CREATE', timestamp: 2, details: 'legacy audit' };
     const profile: AccountingProfile = {
       id: 'primary', regime: 'TT58_2026_MICRO', entityType: 'MICRO_ENTERPRISE', dataStartDate: '2026-07-01',
       taxProfileConfigured: false, vatMethod: 'UNCONFIGURED', incomeTaxMethod: 'UNCONFIGURED', createdAt: 1, updatedAt: 1,
@@ -80,7 +78,7 @@ describeIndexedDb('Dexie accounting cutover integration', () => {
     const upgraded = new AccountingDB(name);
     await upgraded.open();
 
-    expect(upgraded.verno).toBe(7);
+    expect(upgraded.verno).toBe(8);
     expect(await upgraded.accounts.get(CASH_ID)).toEqual(originalAccount);
     expect(await upgraded.transactions.get(TX_ID)).toEqual(originalTransaction);
     expect(await upgraded.auditLogs.get(AUDIT_ID)).toEqual(audit);
@@ -92,6 +90,10 @@ describeIndexedDb('Dexie accounting cutover integration', () => {
     expect(await upgraded.inventoryOpenings.count()).toBe(0);
     expect(await upgraded.inventoryMovements.count()).toBe(0);
     expect(await upgraded.partners.count()).toBe(0);
+    expect(await upgraded.supplementaryDebtEntries.count()).toBe(0);
+    expect(await upgraded.fixedAssets.count()).toBe(0);
+    expect(await upgraded.otherTaxEntries.count()).toBe(0);
+    expect(await upgraded.supplementaryEquityEntries.count()).toBe(0);
 
     const first = await runAccountingCutover(new DexieAccountingCutoverStore(upgraded));
     expect(first.status).toBe('APPLIED');
@@ -115,6 +117,10 @@ describeIndexedDb('Dexie accounting cutover integration', () => {
     expect(await reopened.inventoryOpenings.count()).toBe(0);
     expect(await reopened.inventoryMovements.count()).toBe(0);
     expect(await reopened.partners.count()).toBe(0);
+    expect(await reopened.supplementaryDebtEntries.count()).toBe(0);
+    expect(await reopened.fixedAssets.count()).toBe(0);
+    expect(await reopened.otherTaxEntries.count()).toBe(0);
+    expect(await reopened.supplementaryEquityEntries.count()).toBe(0);
     reopened.close();
   });
 
@@ -169,6 +175,10 @@ describeIndexedDb('Dexie accounting cutover integration', () => {
     expect(await upgraded.taxOpeningPositions.count()).toBe(0);
     expect(await upgraded.inventoryItems.count()).toBe(0);
     expect(await upgraded.partners.count()).toBe(0);
+    expect(await upgraded.supplementaryDebtEntries.count()).toBe(0);
+    expect(await upgraded.fixedAssets.count()).toBe(0);
+    expect(await upgraded.otherTaxEntries.count()).toBe(0);
+    expect(await upgraded.supplementaryEquityEntries.count()).toBe(0);
     upgraded.close();
   });
 });
