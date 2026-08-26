@@ -1,5 +1,6 @@
 import type { Tt58BookCapability } from './tt58BookProjections';
 import type { Tt58MaterializedBooks, Tt58MaterializationStatus } from './tt58MaterializedBooks';
+import type { Tt58FinalMaterializedBooks } from './tt58TaxSettledBooks';
 
 export type Tt58RuntimeBookStatus = Tt58MaterializationStatus | 'PLANNED';
 
@@ -7,10 +8,14 @@ export interface Tt58RuntimeBookCapability extends Omit<Tt58BookCapability, 'sta
   status: Tt58RuntimeBookStatus;
 }
 
-type MaterializedBook = NonNullable<Tt58MaterializedBooks[keyof Tt58MaterializedBooks]>;
+type RuntimeBooks = Tt58MaterializedBooks | Tt58FinalMaterializedBooks;
+type MaterializedBook = NonNullable<
+  Tt58MaterializedBooks[keyof Tt58MaterializedBooks] |
+  Tt58FinalMaterializedBooks[keyof Tt58FinalMaterializedBooks]
+>;
 
 function bookForCode(
-  books: Tt58MaterializedBooks,
+  books: RuntimeBooks,
   code: Tt58BookCapability['code'],
 ): MaterializedBook | undefined {
   switch (code) {
@@ -33,7 +38,7 @@ function bookForCode(
 
 export function applyMaterializedBookReadiness(
   capabilities: readonly Tt58BookCapability[],
-  books: Tt58MaterializedBooks,
+  books: RuntimeBooks,
 ): readonly Tt58RuntimeBookCapability[] {
   return capabilities.map((capability) => {
     const book = bookForCode(books, capability.code);
