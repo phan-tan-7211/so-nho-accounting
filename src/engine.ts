@@ -1,5 +1,6 @@
 import { db } from './db';
-import { Transaction, TransactionType, Account, AuditLog } from './models';
+import { TransactionType } from './models';
+import type { AuditLog, Transaction } from './models';
 
 export class AccountingEngine {
   
