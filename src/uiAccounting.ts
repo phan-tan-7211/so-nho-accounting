@@ -158,8 +158,12 @@ function optionalVnd(value: string, label: string): number | undefined {
 }
 
 function optionalRate(value: string, label: string): number | undefined {
-  if (!value.trim()) return undefined;
-  const parsed = Number(value);
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (!/^\d+(?:[.,]\d+)?$/.test(trimmed)) {
+    throw new Error(`${label} phải là số từ 0–100%; có thể dùng dấu phẩy hoặc dấu chấm cho phần thập phân.`);
+  }
+  const parsed = Number(trimmed.replace(',', '.'));
   if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
     throw new Error(`${label} phải nằm trong khoảng 0–100%.`);
   }
@@ -172,8 +176,20 @@ function optionalText(value: string): string | undefined {
 }
 
 export function dateInputToTimestamp(value: string): number {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('Ngày giao dịch chưa hợp lệ.');
-  const timestamp = new Date(`${value}T12:00:00`).getTime();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) throw new Error('Ngày giao dịch chưa hợp lệ.');
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day, 12, 0, 0, 0);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    throw new Error('Ngày giao dịch không tồn tại trên lịch.');
+  }
+  const timestamp = date.getTime();
   if (!Number.isFinite(timestamp)) throw new Error('Ngày giao dịch chưa hợp lệ.');
   return timestamp;
 }
@@ -226,7 +242,7 @@ export function createPostedTransactionInput(
 
   if (requirements.sourceAccount && !draft.sourceAccountId) throw new Error('Hãy chọn tài khoản chi/nguồn.');
   if (requirements.destinationAccount && !draft.destinationAccountId) throw new Error('Hãy chọn tài khoản thu/đích.');
-  if (requirements.partner && !draft.partnerId.trim()) throw new Error('Partner ID là bắt buộc cho giao dịch công nợ.');
+  if (requirements.partner && !draft.partnerId.trim()) throw new Error('Hãy chọn khách hàng / nhà cung cấp phù hợp cho giao dịch công nợ.');
 
   const input: NewPostedTransactionInput = {
     date: dateInputToTimestamp(draft.date),
