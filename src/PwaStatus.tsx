@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { registerSW } from 'virtual:pwa-register';
+import './PwaStatus.css';
 
 export function PwaStatus() {
   const [offlineReady, setOfflineReady] = useState(false);
