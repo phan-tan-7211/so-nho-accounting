@@ -8,6 +8,7 @@ import type {
   LegacyOpeningBalanceMigrationState,
   OpeningCashEffect,
 } from './legacyOpeningBalanceMigration';
+import { TransactionSchema } from './models';
 
 export const LEGACY_OPENING_BALANCE_MIGRATION_ID = 'legacy-opening-balance-v1' as const;
 
@@ -19,6 +20,7 @@ export interface OpeningEffectRecord extends OpeningCashEffect {
 
 export interface LegacyOpeningBalanceMigrationRecord extends LegacyOpeningBalanceMigrationState {
   id: typeof LEGACY_OPENING_BALANCE_MIGRATION_ID;
+  legacyTransactionIds: readonly string[];
 }
 
 export interface AccountingCutoverTransaction {
@@ -73,12 +75,14 @@ function toOpeningEffectRecords(
 
 function toMigrationRecord(
   state: LegacyOpeningBalanceMigrationState,
+  legacyTransactionIds: readonly string[],
 ): LegacyOpeningBalanceMigrationRecord {
   return {
     id: LEGACY_OPENING_BALANCE_MIGRATION_ID,
     version: state.version,
     sourceSignature: state.sourceSignature,
     openingEffects: state.openingEffects.map((effect) => ({ ...effect })),
+    legacyTransactionIds: [...legacyTransactionIds].sort(),
   };
 }
 
@@ -99,6 +103,10 @@ function assertPersistedCutoverIntegrity(
 ): OpeningEffectRecord[] {
   if (state.version !== LEGACY_OPENING_BALANCE_MIGRATION_VERSION) {
     throw new Error(`Unsupported accounting cutover migration version ${state.version}`);
+  }
+
+  if (new Set(state.legacyTransactionIds).size !== state.legacyTransactionIds.length) {
+    throw new Error('Accounting cutover integrity error: duplicate legacy transaction ids');
   }
 
   const expected = toOpeningEffectRecords(state.openingEffects).map(canonicalOpeningEffectRecord);
@@ -156,8 +164,14 @@ export async function runAccountingCutover(
       };
     }
 
+    // READY guarantees that every transaction passed TransactionSchema and that ids
+    // are unique. Persisting this exact membership lets the future runtime distinguish
+    // pre-cutover TRANSFER/CAPITAL_CONTRIBUTION rows from semantic rows of the same type.
+    const legacyTransactionIds = transactions
+      .map((rawTransaction) => TransactionSchema.parse(rawTransaction).id)
+      .sort();
     const finalized = finalizeLegacyOpeningBalanceMigration(plan);
-    const state = toMigrationRecord(finalized);
+    const state = toMigrationRecord(finalized, legacyTransactionIds);
     const openingEffects = toOpeningEffectRecords(finalized.openingEffects);
 
     // These writes must live in the same adapter transaction. If either fails,
