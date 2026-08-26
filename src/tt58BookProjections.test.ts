@@ -205,8 +205,8 @@ describe('TT58 core activity rows', () => {
     expect(activities.debt).toEqual([]);
     expect(activities.equity).toEqual([]);
     expect(activities.money).toEqual([
-      expect.objectContaining({ accountId: BANK, amount: 100 }),
       expect.objectContaining({ accountId: CASH, amount: -100 }),
+      expect.objectContaining({ accountId: BANK, amount: 100 }),
     ]);
   });
 
