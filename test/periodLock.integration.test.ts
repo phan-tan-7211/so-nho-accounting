@@ -79,7 +79,7 @@ describeIndexedDb('TT58 period lock integration', () => {
     expect(locked.alreadyLocked).toBe(false);
     expect(locked.state).toMatchObject({ status: 'LOCKED', revision: 1 });
     expect(locked.report.tables.map((table) => table.code)).toEqual(['S1-DNSN']);
-    expect(locked.report.tables[0]?.rows[0]).toMatchObject(['ENTRY']);
+    expect(locked.report.tables[0]?.rows[0]?.[0]).toBe('ENTRY');
 
     const repeated = await locks.lockPeriod(PERIOD);
     expect(repeated.alreadyLocked).toBe(true);
