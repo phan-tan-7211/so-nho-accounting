@@ -1,8 +1,10 @@
 # Sổ nhỏ TT58 — Release Candidate Checklist
 
-Release: **1.0.0-rc.1**  
+Release: **1.0.0-rc.2**  
 Date: **2026-08-26**  
 Scope: **TT58/2026/TT-BTC V1 only**
+
+> Phase 16 production baseline (`1.0.0-rc.1`) was verified on 2026-08-26: production root rendered normally, manifest and Workbox service worker were valid, required app-shell assets were precached, root navigation fallback worked, and an offline reload succeeded after the first online load. The checks below are intentionally reset for `rc.2`; stabilization changes must pass their own exact-head gate and production smoke test before promotion.
 
 ## 1. Accounting correctness gate
 
@@ -21,8 +23,18 @@ Scope: **TT58/2026/TT-BTC V1 only**
 - [ ] Restore into a clean database reproduces locked report output exactly.
 - [ ] User-facing release notes state that clearing browser/site data deletes local IndexedDB unless a backup exists.
 - [ ] Update flow does not automatically reload over active work.
+- [ ] Fatal UI fallback does not imply that local IndexedDB data was deleted and warns against clearing browser data before recovery.
 
-## 3. PWA / production build gate
+## 3. Input / mobile stabilization gate
+
+- [ ] Impossible calendar dates are rejected instead of silently normalized.
+- [ ] Percentage fields accept Vietnamese decimal commas and reject ambiguous/exponent syntax.
+- [ ] Customer/supplier validation uses user-facing terminology rather than internal IDs.
+- [ ] Core form controls remain at least 44px high.
+- [ ] Mobile form controls use a focus-safe font size to avoid unintended iOS zoom.
+- [ ] Quick transaction sheet supports keyboard Escape and predictable initial focus.
+
+## 4. PWA / production build gate
 
 - [ ] `manifest.webmanifest` is generated.
 - [ ] `sw.js` and Workbox runtime are generated.
@@ -31,7 +43,7 @@ Scope: **TT58/2026/TT-BTC V1 only**
 - [ ] Hashed `/assets/*` files use immutable long-lived cache headers.
 - [ ] App shell opens after a successful online load and remains available offline.
 
-## 4. Production smoke test
+## 5. Production smoke test
 
 - [ ] Production root URL returns HTTP 200.
 - [ ] App title/navigation renders.
@@ -41,7 +53,7 @@ Scope: **TT58/2026/TT-BTC V1 only**
 - [ ] Install prompt / Add to Home Screen eligibility is checked in a supported browser.
 - [ ] Online → offline reload is tested after the first successful load.
 
-## 5. Accounting acceptance scenario
+## 6. Accounting acceptance scenario
 
 - [ ] Configure TT58 profile and report identity.
 - [ ] Create cash/bank account with explicit kind.
@@ -56,6 +68,6 @@ Scope: **TT58/2026/TT-BTC V1 only**
 - [ ] Create full backup.
 - [ ] Restore backup into a clean browser/database and confirm locked outputs are reproduced.
 
-## 6. Release boundary
+## 7. Release boundary
 
 Release candidate does **not** fabricate supplementary S4 domains that are not implemented. Fixed-assets and other-tax supplementary domains remain explicit future scope. This release is local-first: accounting data is stored in browser IndexedDB, not in a server-side database.
