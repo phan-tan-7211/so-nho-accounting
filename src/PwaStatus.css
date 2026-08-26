@@ -1,0 +1,47 @@
+.pwa-banner {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: min(100%, 720px);
+  margin: 0 auto;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+}
+
+.pwa-banner strong,
+.pwa-banner small {
+  display: block;
+}
+
+.pwa-banner small {
+  margin-top: 3px;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.pwa-banner__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+@media (max-width: 560px) {
+  .pwa-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pwa-banner__actions {
+    width: 100%;
+  }
+
+  .pwa-banner__actions button {
+    flex: 1;
+  }
+}
