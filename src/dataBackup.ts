@@ -6,27 +6,51 @@ import { AccountingProfileSchema } from './accountingProfile';
 import { TaxOpeningPositionSchema } from './taxOpeningPosition';
 import { InventoryItemSchema, InventoryMovementSchema, InventoryOpeningSchema } from './inventory';
 import { PartnerSchema } from './partners';
-import type { LegacyOpeningBalanceMigrationRecord, OpeningEffectRecord } from './accountingCutoverPersistence';
-import type { PeriodLockEvent, PeriodLockRecord } from './periodLock';
+import {
+  LEGACY_OPENING_BALANCE_MIGRATION_ID,
+} from './accountingCutoverPersistence';
+import {
+  LEGACY_OPENING_BALANCE_MIGRATION_VERSION,
+  OpeningEffectKind,
+} from './legacyOpeningBalanceMigration';
 
 export const BACKUP_FORMAT = 'SO_NHO_ACCOUNTING_BACKUP' as const;
 export const BACKUP_FORMAT_VERSION = 1 as const;
 export const CURRENT_DATABASE_VERSION = 7 as const;
 
-const BasicIdRecordSchema = z.object({ id: z.string().min(1) }).passthrough();
-const BasicMigrationStateSchema = BasicIdRecordSchema.extend({
-  version: z.number().int().positive(),
-  sourceSignature: z.string().min(1),
-  legacyTransactionIds: z.array(z.string()),
+const OpeningCashEffectSchema = z.object({
+  kind: z.literal(OpeningEffectKind.OPENING_CASH),
+  accountId: z.string().uuid(),
+  amount: z.number().int(),
 });
-const BasicPeriodLockSchema = BasicIdRecordSchema.extend({
+
+const OpeningEffectRecordSchema = OpeningCashEffectSchema.extend({
+  id: z.string().min(1),
+  migrationId: z.literal(LEGACY_OPENING_BALANCE_MIGRATION_ID),
+  migrationVersion: z.literal(LEGACY_OPENING_BALANCE_MIGRATION_VERSION),
+});
+
+const MigrationStateSchema = z.object({
+  id: z.literal(LEGACY_OPENING_BALANCE_MIGRATION_ID),
+  version: z.literal(LEGACY_OPENING_BALANCE_MIGRATION_VERSION),
+  sourceSignature: z.string().min(1),
+  openingEffects: z.array(OpeningCashEffectSchema),
+  legacyTransactionIds: z.array(z.string().uuid()),
+});
+
+const PeriodLockRecordSchema = z.object({
+  id: z.string().min(1),
   periodStart: z.number().int().nonnegative(),
   periodEnd: z.number().int().nonnegative(),
   status: z.enum(['LOCKED', 'UNLOCKED']),
   revision: z.number().int().positive(),
+  lockedAt: z.number().int().nonnegative(),
+  unlockedAt: z.number().int().nonnegative().optional(),
   reportSnapshotJson: z.string(),
 });
-const BasicPeriodLockEventSchema = BasicIdRecordSchema.extend({
+
+const PeriodLockEventSchema = z.object({
+  id: z.string().uuid(),
   periodLockId: z.string().min(1),
   action: z.enum(['LOCK', 'UNLOCK']),
   revision: z.number().int().positive(),
@@ -63,11 +87,11 @@ interface ParsedBackupData {
   transactions: z.infer<typeof TransactionSchema>[];
   auditLogs: z.infer<typeof AuditLogSchema>[];
   accountingProfiles: z.infer<typeof AccountingProfileSchema>[];
-  openingEffects: OpeningEffectRecord[];
-  migrationStates: LegacyOpeningBalanceMigrationRecord[];
+  openingEffects: z.infer<typeof OpeningEffectRecordSchema>[];
+  migrationStates: z.infer<typeof MigrationStateSchema>[];
   taxOpeningPositions: z.infer<typeof TaxOpeningPositionSchema>[];
-  periodLocks: PeriodLockRecord[];
-  periodLockEvents: PeriodLockEvent[];
+  periodLocks: z.infer<typeof PeriodLockRecordSchema>[];
+  periodLockEvents: z.infer<typeof PeriodLockEventSchema>[];
   inventoryItems: z.infer<typeof InventoryItemSchema>[];
   inventoryOpenings: z.infer<typeof InventoryOpeningSchema>[];
   inventoryMovements: z.infer<typeof InventoryMovementSchema>[];
@@ -106,11 +130,11 @@ function parseBackupData(data: BackupData): ParsedBackupData {
     transactions: parseArray(data.transactions, TransactionSchema, 'transactions'),
     auditLogs: parseArray(data.auditLogs, AuditLogSchema, 'auditLogs'),
     accountingProfiles: parseArray(data.accountingProfiles, AccountingProfileSchema, 'accountingProfiles'),
-    openingEffects: parseArray(data.openingEffects, BasicIdRecordSchema, 'openingEffects') as OpeningEffectRecord[],
-    migrationStates: parseArray(data.migrationStates, BasicMigrationStateSchema, 'migrationStates') as LegacyOpeningBalanceMigrationRecord[],
+    openingEffects: parseArray(data.openingEffects, OpeningEffectRecordSchema, 'openingEffects'),
+    migrationStates: parseArray(data.migrationStates, MigrationStateSchema, 'migrationStates'),
     taxOpeningPositions: parseArray(data.taxOpeningPositions, TaxOpeningPositionSchema, 'taxOpeningPositions'),
-    periodLocks: parseArray(data.periodLocks, BasicPeriodLockSchema, 'periodLocks') as PeriodLockRecord[],
-    periodLockEvents: parseArray(data.periodLockEvents, BasicPeriodLockEventSchema, 'periodLockEvents') as PeriodLockEvent[],
+    periodLocks: parseArray(data.periodLocks, PeriodLockRecordSchema, 'periodLocks'),
+    periodLockEvents: parseArray(data.periodLockEvents, PeriodLockEventSchema, 'periodLockEvents'),
     inventoryItems: parseArray(data.inventoryItems, InventoryItemSchema, 'inventoryItems'),
     inventoryOpenings: parseArray(data.inventoryOpenings, InventoryOpeningSchema, 'inventoryOpenings'),
     inventoryMovements: parseArray(data.inventoryMovements, InventoryMovementSchema, 'inventoryMovements'),
