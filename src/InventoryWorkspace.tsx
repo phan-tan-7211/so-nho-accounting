@@ -46,7 +46,7 @@ const OUT_LINK_TYPES = new Set<Transaction['type']>([
   TransactionType.SUPPLIER_REFUND,
 ]);
 
-export function InventoryWorkspace({ periodStart }: { periodStart: number }) {
+export function InventoryWorkspace({ periodStart, locked }: { periodStart: number; locked: boolean }) {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -87,10 +87,6 @@ export function InventoryWorkspace({ periodStart }: { periodStart: number }) {
     return () => window.clearTimeout(timer);
   }, [reload]);
 
-  useEffect(() => {
-    setOpeningDate(dateInput(periodStart));
-  }, [periodStart]);
-
   const linkCandidates = useMemo(() => {
     const allowed = direction === InventoryDirection.IN ? IN_LINK_TYPES : OUT_LINK_TYPES;
     return transactions.filter((tx) => tx.status === 'POSTED' && allowed.has(tx.type));
@@ -98,69 +94,52 @@ export function InventoryWorkspace({ periodStart }: { periodStart: number }) {
 
   async function createItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError(null);
-    setMessage(null);
-    setSaving(true);
+    if (locked) return;
+    setError(null); setMessage(null); setSaving(true);
     try {
       await inventoryService.createItem({
-        code: itemCode.trim(),
-        name: itemName.trim(),
-        unit: unit.trim(),
+        code: itemCode.trim(), name: itemName.trim(), unit: unit.trim(),
         openingEffectiveDate: timestampFromDate(openingDate),
         openingQuantityMilli: parseInventoryQuantityToMilli(openingQuantity),
         openingUnitCostVnd: parseVnd(openingUnitCost),
       });
-      setItemCode('');
-      setItemName('');
-      setOpeningQuantity('0');
-      setOpeningUnitCost('0');
+      setItemCode(''); setItemName(''); setOpeningQuantity('0'); setOpeningUnitCost('0');
       setMessage('Đã tạo item và opening tồn kho explicit.');
       await reload();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không thể tạo item tồn kho.');
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   async function postMovement(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError(null);
-    setMessage(null);
-    setSaving(true);
+    if (locked) return;
+    setError(null); setMessage(null); setSaving(true);
     try {
       if (!movementItemId) throw new Error('Cần chọn item.');
       const quantityMilli = parseInventoryQuantityToMilli(quantity);
       if (quantityMilli <= 0) throw new Error('Số lượng movement phải lớn hơn 0.');
-      const unitCostVnd = parseVnd(unitCost);
       await inventoryService.postMovement({
         itemId: movementItemId,
         date: timestampFromDate(movementDate),
         direction,
         quantityMilli,
-        unitCostVnd,
+        unitCostVnd: parseVnd(unitCost),
         transactionId: linkedTransactionId || undefined,
         documentNumber: documentNumber.trim() || undefined,
         description: description.trim() || undefined,
       });
-      setQuantity('1');
-      setUnitCost('0');
-      setDocumentNumber('');
-      setLinkedTransactionId('');
-      setDescription('');
+      setQuantity('1'); setUnitCost('0'); setDocumentNumber(''); setLinkedTransactionId(''); setDescription('');
       setMessage('Đã ghi movement tồn kho; S2c sẽ được dựng lại từ subledger.');
       await reload();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không thể ghi movement tồn kho.');
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   async function reverseMovement(movement: InventoryMovement) {
-    if (!window.confirm('Đảo movement tồn kho này? Movement gốc sẽ được giữ lại.')) return;
-    setError(null);
-    setMessage(null);
+    if (locked || !window.confirm('Đảo movement tồn kho này? Movement gốc sẽ được giữ lại.')) return;
+    setError(null); setMessage(null);
     try {
       await inventoryService.reverseMovement(movement.id);
       setMessage('Đã tạo movement đảo, không xóa movement gốc.');
@@ -173,76 +152,55 @@ export function InventoryWorkspace({ periodStart }: { periodStart: number }) {
   return (
     <section className="workspace-card inventory-workspace" aria-labelledby="inventory-title">
       <div className="workspace-heading compact-heading">
-        <div>
-          <strong id="inventory-title">Tồn kho · S2c-DNSN</strong>
-          <small>Không suy đoán FIFO/bình quân; mỗi movement dùng đơn giá VND explicit.</small>
-        </div>
-        <span className="runtime-badge pending">SUBLEDGER</span>
+        <div><strong id="inventory-title">Tồn kho · S2c-DNSN</strong><small>Không suy đoán FIFO/bình quân; mỗi movement dùng đơn giá VND explicit.</small></div>
+        <span className={`runtime-badge ${locked ? 'ready' : 'pending'}`}>{locked ? 'LOCKED' : 'SUBLEDGER'}</span>
       </div>
+      {locked ? <p className="form-alert warning">Kỳ đang khóa. UI và service đều chặn thay đổi tồn kho trong kỳ.</p> : null}
 
-      <form className="compact-form inventory-subform" onSubmit={createItem}>
-        <strong>Tạo item + opening</strong>
-        <div className="form-grid three-columns">
-          <label><span>Mã item</span><input value={itemCode} onChange={(event) => setItemCode(event.target.value)} required /></label>
-          <label><span>Tên item</span><input value={itemName} onChange={(event) => setItemName(event.target.value)} required /></label>
-          <label><span>Đơn vị</span><input value={unit} onChange={(event) => setUnit(event.target.value)} required /></label>
-        </div>
-        <div className="form-grid three-columns">
-          <label><span>Ngày opening</span><input type="date" value={openingDate} onChange={(event) => setOpeningDate(event.target.value)} /></label>
-          <label><span>SL opening</span><input inputMode="decimal" value={openingQuantity} onChange={(event) => setOpeningQuantity(event.target.value)} /></label>
-          <label><span>Đơn giá opening</span><input inputMode="numeric" value={openingUnitCost} onChange={(event) => setOpeningUnitCost(event.target.value)} /></label>
-        </div>
-        <button className="secondary-button" type="submit" disabled={saving}>Tạo item</button>
-      </form>
+      <fieldset className="inventory-fieldset" disabled={locked || saving}>
+        <form className="compact-form inventory-subform" onSubmit={createItem}>
+          <strong>Tạo item + opening</strong>
+          <div className="form-grid three-columns">
+            <label><span>Mã item</span><input value={itemCode} onChange={(event) => setItemCode(event.target.value)} required /></label>
+            <label><span>Tên item</span><input value={itemName} onChange={(event) => setItemName(event.target.value)} required /></label>
+            <label><span>Đơn vị</span><input value={unit} onChange={(event) => setUnit(event.target.value)} required /></label>
+          </div>
+          <div className="form-grid three-columns">
+            <label><span>Ngày opening</span><input type="date" value={openingDate} onChange={(event) => setOpeningDate(event.target.value)} /></label>
+            <label><span>SL opening</span><input inputMode="decimal" value={openingQuantity} onChange={(event) => setOpeningQuantity(event.target.value)} /></label>
+            <label><span>Đơn giá opening</span><input inputMode="numeric" value={openingUnitCost} onChange={(event) => setOpeningUnitCost(event.target.value)} /></label>
+          </div>
+          <button className="secondary-button" type="submit">Tạo item</button>
+        </form>
 
-      <form className="compact-form inventory-subform" onSubmit={postMovement}>
-        <strong>Ghi nhập / xuất</strong>
-        <div className="form-grid three-columns">
-          <label>
-            <span>Item</span>
-            <select value={movementItemId} onChange={(event) => setMovementItemId(event.target.value)}>
-              <option value="">Chọn item</option>
-              {items.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}
-            </select>
-          </label>
-          <label><span>Hướng</span><select value={direction} onChange={(event) => { setDirection(event.target.value as typeof direction); setLinkedTransactionId(''); }}><option value={InventoryDirection.IN}>Nhập</option><option value={InventoryDirection.OUT}>Xuất</option></select></label>
-          <label><span>Ngày</span><input type="date" value={movementDate} onChange={(event) => setMovementDate(event.target.value)} /></label>
-        </div>
-        <div className="form-grid three-columns">
-          <label><span>Số lượng</span><input inputMode="decimal" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
-          <label><span>Đơn giá VND</span><input inputMode="numeric" value={unitCost} onChange={(event) => setUnitCost(event.target.value)} /></label>
-          <label><span>Số chứng từ</span><input value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} /></label>
-        </div>
-        <label>
-          <span>Liên kết giao dịch mua/bán/refund</span>
-          <select value={linkedTransactionId} onChange={(event) => setLinkedTransactionId(event.target.value)}>
-            <option value="">Không liên kết</option>
-            {linkCandidates.map((tx) => <option key={tx.id} value={tx.id}>{tx.documentNumber ?? tx.invoiceNumber ?? tx.id.slice(0, 8)} · {tx.type}</option>)}
-          </select>
-          <small>Liên kết chỉ để đối chiếu; movement không tự thay đổi Accounting Effects.</small>
-        </label>
-        <label><span>Diễn giải</span><input value={description} onChange={(event) => setDescription(event.target.value)} /></label>
-        <button className="secondary-button" type="submit" disabled={saving || items.length === 0}>Ghi movement</button>
-      </form>
+        <form className="compact-form inventory-subform" onSubmit={postMovement}>
+          <strong>Ghi nhập / xuất</strong>
+          <div className="form-grid three-columns">
+            <label><span>Item</span><select value={movementItemId} onChange={(event) => setMovementItemId(event.target.value)}><option value="">Chọn item</option>{items.map((item) => <option key={item.id} value={item.id}>{item.code} · {item.name}</option>)}</select></label>
+            <label><span>Hướng</span><select value={direction} onChange={(event) => { setDirection(event.target.value as typeof direction); setLinkedTransactionId(''); }}><option value={InventoryDirection.IN}>Nhập</option><option value={InventoryDirection.OUT}>Xuất</option></select></label>
+            <label><span>Ngày</span><input type="date" value={movementDate} onChange={(event) => setMovementDate(event.target.value)} /></label>
+          </div>
+          <div className="form-grid three-columns">
+            <label><span>Số lượng</span><input inputMode="decimal" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
+            <label><span>Đơn giá VND</span><input inputMode="numeric" value={unitCost} onChange={(event) => setUnitCost(event.target.value)} /></label>
+            <label><span>Số chứng từ</span><input value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} /></label>
+          </div>
+          <label><span>Liên kết giao dịch mua/bán/refund</span><select value={linkedTransactionId} onChange={(event) => setLinkedTransactionId(event.target.value)}><option value="">Không liên kết</option>{linkCandidates.map((tx) => <option key={tx.id} value={tx.id}>{tx.documentNumber ?? tx.invoiceNumber ?? tx.id.slice(0, 8)} · {tx.type}</option>)}</select><small>Liên kết chỉ để đối chiếu; movement không tự thay đổi Accounting Effects.</small></label>
+          <label><span>Diễn giải</span><input value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+          <button className="secondary-button" type="submit" disabled={items.length === 0}>Ghi movement</button>
+        </form>
+      </fieldset>
 
       {error ? <p className="form-alert error" role="alert">{error}</p> : null}
       {message ? <p className="form-alert success" role="status">{message}</p> : null}
-
-      <div className="inventory-list">
-        {items.length === 0 ? <p className="empty-copy">Chưa có item tồn kho.</p> : items.map((item) => <div className="inventory-item-row" key={item.id}><strong>{item.code} · {item.name}</strong><small>{item.unit}</small></div>)}
-      </div>
-
-      {movements.length > 0 ? (
-        <div className="inventory-movement-list">
-          {movements.slice(0, 20).map((movement) => (
-            <div className="inventory-movement-row" key={movement.id}>
-              <div><strong>{movement.direction === InventoryDirection.IN ? 'Nhập' : 'Xuất'} {formatInventoryQuantity(movement.quantityMilli)}</strong><small>{movement.documentNumber ?? movement.id.slice(0, 8)} · {movement.status}</small></div>
-              <span>{formatVnd(inventoryLineValueVnd(movement.quantityMilli, movement.unitCostVnd))}</span>
-              {movement.status === 'POSTED' && !movement.reversalOfMovementId ? <button className="text-danger-button" type="button" onClick={() => void reverseMovement(movement)}>Đảo</button> : null}
-            </div>
-          ))}
+      <div className="inventory-list">{items.length === 0 ? <p className="empty-copy">Chưa có item tồn kho.</p> : items.map((item) => <div className="inventory-item-row" key={item.id}><strong>{item.code} · {item.name}</strong><small>{item.unit}</small></div>)}</div>
+      {movements.length > 0 ? <div className="inventory-movement-list">{movements.slice(0, 20).map((movement) => (
+        <div className="inventory-movement-row" key={movement.id}>
+          <div><strong>{movement.direction === InventoryDirection.IN ? 'Nhập' : 'Xuất'} {formatInventoryQuantity(movement.quantityMilli)}</strong><small>{movement.documentNumber ?? movement.id.slice(0, 8)} · {movement.status}</small></div>
+          <span>{formatVnd(inventoryLineValueVnd(movement.quantityMilli, movement.unitCostVnd))}</span>
+          {movement.status === 'POSTED' && !movement.reversalOfMovementId ? <button className="text-danger-button" disabled={locked} type="button" onClick={() => void reverseMovement(movement)}>Đảo</button> : null}
         </div>
-      ) : null}
+      ))}</div> : null}
     </section>
   );
 }
