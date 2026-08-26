@@ -1,6 +1,6 @@
 import type { AccountingProfile } from './accountingProfile';
 import type { ProjectionPeriod } from './accountingProjections';
-import type { Tt58BookCapability } from './tt58BookProjections';
+import type { Tt58RuntimeBookCapability } from './tt58CapabilityReadiness';
 import type { Tt58FinalMaterializedBooks } from './tt58TaxSettledBooks';
 
 export type ReportCell = string | number;
@@ -25,7 +25,7 @@ export interface Tt58ReportBundle {
 
 export interface BuildTt58ReportInput {
   profile: AccountingProfile;
-  capabilities: readonly Tt58BookCapability[];
+  capabilities: readonly Tt58RuntimeBookCapability[];
   materializedBooks: Tt58FinalMaterializedBooks;
   period: ProjectionPeriod;
 }
@@ -211,7 +211,9 @@ function s3bTable(title: string, book: NonNullable<Tt58FinalMaterializedBooks['s
   };
 }
 
-function requiredImplementedCapabilities(capabilities: readonly Tt58BookCapability[]): readonly Tt58BookCapability[] {
+function requiredImplementedCapabilities(
+  capabilities: readonly Tt58RuntimeBookCapability[],
+): readonly Tt58RuntimeBookCapability[] {
   const required = capabilities.filter((capability) => capability.required);
   if (required.length === 0) throw new Error('TT58 tax profile has no required books to export');
   for (const capability of required) {
