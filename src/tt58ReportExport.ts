@@ -15,6 +15,8 @@ export interface Tt58ReportTable {
   title: string;
   columns: readonly string[];
   rows: readonly (readonly ReportCell[])[];
+  status?: 'IMPLEMENTED' | 'PARTIAL';
+  issues?: readonly string[];
 }
 
 export interface Tt58ReportInventoryValuation {
@@ -186,9 +188,69 @@ function s3bTable(title: string, book: NonNullable<Tt58FinalMaterializedBooks['s
   };
 }
 
-function requiredImplementedCapabilities(
-  capabilities: readonly Tt58RuntimeBookCapability[],
-): readonly Tt58RuntimeBookCapability[] {
+function supplementaryMeta(book: { status: 'IMPLEMENTED' | 'PARTIAL'; issues: readonly { message: string }[] }) {
+  return { status: book.status, issues: book.issues.map((issue) => issue.message) } as const;
+}
+
+function s4aTable(title: string, book: NonNullable<Tt58FinalMaterializedBooks['s4a']>): Tt58ReportTable {
+  const rows: ReportCell[][] = [];
+  for (const section of book.sections) {
+    rows.push(['OPENING', section.subjectCode, section.subjectName, section.subjectKind, '', '', 'Số dư đầu kỳ', 0, 0, section.openingReceivableVnd, 0, 0, section.openingPayableVnd]);
+    for (const row of section.rows) {
+      rows.push(['ENTRY', section.subjectCode, section.subjectName, section.subjectKind, dateCell(row.date), row.documentNumber ?? '', row.description ?? '', row.receivableIncreaseVnd, row.receivableCollectedVnd, row.receivableBalanceVnd, row.payableIncreaseVnd, row.payablePaidVnd, row.payableBalanceVnd]);
+    }
+    rows.push(['TOTAL', section.subjectCode, section.subjectName, section.subjectKind, '', '', 'Cộng phát sinh / Số dư cuối kỳ', section.totalReceivableIncreaseVnd, section.totalReceivableCollectedVnd, section.closingReceivableVnd, section.totalPayableIncreaseVnd, section.totalPayablePaidVnd, section.closingPayableVnd]);
+  }
+  return {
+    code: 'S4a-DNSN', title,
+    columns: ['rowType', 'subjectCode', 'subjectName', 'subjectKind', 'date', 'documentNumber', 'description', 'receivableIncrease', 'receivableCollected', 'receivableBalance', 'payableIncrease', 'payablePaid', 'payableBalance'],
+    rows, ...supplementaryMeta(book),
+  };
+}
+
+function s4bTable(title: string, book: NonNullable<Tt58FinalMaterializedBooks['s4b']>): Tt58ReportTable {
+  const rows: ReportCell[][] = book.rows.map((asset) => [
+    'ENTRY', asset.increaseDocumentNumber, dateCell(asset.increaseDate), `${asset.code} · ${asset.name} · ${asset.category}`,
+    asset.putIntoUseMonth, asset.originalCostVnd, asset.annualDepreciationRatePct, asset.depreciationVndForYear,
+    asset.accumulatedDepreciationVnd, asset.decreaseDocumentNumber ?? '', asset.decreaseDate === undefined ? '' : dateCell(asset.decreaseDate), asset.decreaseReason ?? '',
+  ]);
+  return {
+    code: 'S4b-DNSN', title,
+    columns: ['rowType', 'increaseDocumentNumber', 'increaseDate', 'asset', 'putIntoUseMonth', 'originalCost', 'annualDepreciationRatePct', 'depreciationForYear', 'accumulatedDepreciation', 'decreaseDocumentNumber', 'decreaseDate', 'decreaseReason'],
+    rows, ...supplementaryMeta(book),
+  };
+}
+
+function s4cTable(title: string, book: NonNullable<Tt58FinalMaterializedBooks['s4c']>): Tt58ReportTable {
+  const rows: ReportCell[][] = book.rows.map((entry) => [
+    'ENTRY', entry.taxCode, entry.taxName, dateCell(entry.date), entry.description, formatInventoryQuantity(entry.taxableQuantityMilli),
+    entry.absoluteTaxRateVnd, entry.taxableUnitPriceVnd, entry.taxRatePct, entry.proportionalTaxVnd, entry.absoluteTaxVnd,
+    entry.exportImportExcisePayableVnd, entry.environmentalProtectionTaxVnd, entry.resourceTaxVnd, entry.landUseTaxVnd, entry.otherTaxVnd,
+  ]);
+  return {
+    code: 'S4c-DNSN', title,
+    columns: ['rowType', 'taxCode', 'taxName', 'date', 'description', 'taxableQuantity', 'absoluteTaxRate', 'taxableUnitPrice', 'taxRatePct', 'proportionalTax', 'absoluteTax', 'exportImportExcisePayable', 'environmentalProtectionTax', 'resourceTax', 'landUseTax', 'otherTax'],
+    rows, ...supplementaryMeta(book),
+  };
+}
+
+function s4dTable(title: string, book: NonNullable<Tt58FinalMaterializedBooks['s4d']>): Tt58ReportTable {
+  const rows: ReportCell[][] = [];
+  for (const section of book.sections) {
+    rows.push(['OPENING', section.accountCode, section.accountName, section.category, '', '', 'Số dư đầu kỳ', 0, 0, section.openingBalanceVnd]);
+    for (const row of section.rows) {
+      rows.push(['ENTRY', section.accountCode, section.accountName, section.category, dateCell(row.date), row.documentNumber ?? '', row.description, row.increaseVnd, row.decreaseVnd, row.balanceVnd]);
+    }
+    rows.push(['TOTAL', section.accountCode, section.accountName, section.category, '', '', 'Cộng phát sinh / Số dư cuối kỳ', section.totalIncreaseVnd, section.totalDecreaseVnd, section.closingBalanceVnd]);
+  }
+  return {
+    code: 'S4d-DNSN', title,
+    columns: ['rowType', 'accountCode', 'accountName', 'category', 'date', 'documentNumber', 'description', 'increase', 'decrease', 'balance'],
+    rows, ...supplementaryMeta(book),
+  };
+}
+
+function requiredImplementedCapabilities(capabilities: readonly Tt58RuntimeBookCapability[]): readonly Tt58RuntimeBookCapability[] {
   const required = capabilities.filter((capability) => capability.required);
   if (required.length === 0) throw new Error('TT58 tax profile has no required books to export');
   for (const capability of required) {
@@ -200,48 +262,36 @@ function requiredImplementedCapabilities(
   return required;
 }
 
+function coreTable(capability: Tt58RuntimeBookCapability, books: Tt58FinalMaterializedBooks): Tt58ReportTable {
+  switch (capability.code) {
+    case 'S1-DNSN': if (books.s1) return revenueTable('S1-DNSN', capability.name, books.s1); break;
+    case 'S2a-DNSN': if (books.s2a) return revenueTable('S2a-DNSN', capability.name, books.s2a); break;
+    case 'S2b-DNSN': if (books.s2b) return s2bTable(capability.name, books.s2b); break;
+    case 'S2c-DNSN': if (books.s2c) return s2cTable(capability.name, books.s2c); break;
+    case 'S2d-DNSN': if (books.s2d) return s2dTable(capability.name, books.s2d); break;
+    case 'S3a-DNSN': if (books.s3a) return revenueTable('S3a-DNSN', capability.name, books.s3a); break;
+    case 'S3b-DNSN': if (books.s3b) return s3bTable(capability.name, books.s3b); break;
+  }
+  throw new Error(`Required TT58 book ${capability.code} has no materialized export formatter`);
+}
+
+function supplementaryTables(capabilities: readonly Tt58RuntimeBookCapability[], books: Tt58FinalMaterializedBooks): Tt58ReportTable[] {
+  const titles = new Map(capabilities.map((capability) => [capability.code, capability.name]));
+  const tables: Tt58ReportTable[] = [];
+  if (books.s4a && books.s4a.sections.length > 0) tables.push(s4aTable(titles.get('S4a-DNSN') ?? 'Sổ chi tiết thanh toán công nợ', books.s4a));
+  if (books.s4b && books.s4b.rows.length > 0) tables.push(s4bTable(titles.get('S4b-DNSN') ?? 'Sổ tài sản cố định', books.s4b));
+  if (books.s4c && books.s4c.rows.length > 0) tables.push(s4cTable(titles.get('S4c-DNSN') ?? 'Sổ theo dõi nghĩa vụ thuế khác', books.s4c));
+  if (books.s4d && books.s4d.sections.length > 0) tables.push(s4dTable(titles.get('S4d-DNSN') ?? 'Sổ theo dõi vốn chủ sở hữu', books.s4d));
+  return tables;
+}
+
 export function buildTt58ReportBundle(input: BuildTt58ReportInput): Tt58ReportBundle {
   if (!input.profile.taxProfileConfigured) throw new Error('TT58 tax profile must be configured before report export');
-  if (!Number.isFinite(input.period.start) || !Number.isFinite(input.period.end) || input.period.start > input.period.end) {
-    throw new Error('Invalid TT58 report period');
-  }
+  if (!Number.isFinite(input.period.start) || !Number.isFinite(input.period.end) || input.period.start > input.period.end) throw new Error('Invalid TT58 report period');
 
   const required = requiredImplementedCapabilities(input.capabilities);
-  const tables: Tt58ReportTable[] = [];
-  for (const capability of required) {
-    switch (capability.code) {
-      case 'S1-DNSN':
-        if (!input.materializedBooks.s1) throw new Error('S1-DNSN materialized book is missing');
-        tables.push(revenueTable('S1-DNSN', capability.name, input.materializedBooks.s1));
-        break;
-      case 'S2a-DNSN':
-        if (!input.materializedBooks.s2a) throw new Error('S2a-DNSN materialized book is missing');
-        tables.push(revenueTable('S2a-DNSN', capability.name, input.materializedBooks.s2a));
-        break;
-      case 'S2b-DNSN':
-        if (!input.materializedBooks.s2b) throw new Error('S2b-DNSN materialized book is missing');
-        tables.push(s2bTable(capability.name, input.materializedBooks.s2b));
-        break;
-      case 'S2c-DNSN':
-        if (!input.materializedBooks.s2c) throw new Error('S2c-DNSN materialized book is missing');
-        tables.push(s2cTable(capability.name, input.materializedBooks.s2c));
-        break;
-      case 'S2d-DNSN':
-        if (!input.materializedBooks.s2d) throw new Error('S2d-DNSN materialized book is missing');
-        tables.push(s2dTable(capability.name, input.materializedBooks.s2d));
-        break;
-      case 'S3a-DNSN':
-        if (!input.materializedBooks.s3a) throw new Error('S3a-DNSN materialized book is missing');
-        tables.push(revenueTable('S3a-DNSN', capability.name, input.materializedBooks.s3a));
-        break;
-      case 'S3b-DNSN':
-        if (!input.materializedBooks.s3b) throw new Error('S3b-DNSN materialized book is missing');
-        tables.push(s3bTable(capability.name, input.materializedBooks.s3b));
-        break;
-      default:
-        throw new Error(`Required TT58 book ${capability.code} has no export formatter in V1`);
-    }
-  }
+  const tables = required.map((capability) => coreTable(capability, input.materializedBooks));
+  tables.push(...supplementaryTables(input.capabilities, input.materializedBooks));
 
   const s2c = input.materializedBooks.s2c;
   return {
@@ -289,7 +339,7 @@ function csvCell(value: ReportCell): string {
 }
 
 export function reportTableToCsv(table: Tt58ReportTable): string {
-  const lines = [table.columns.map(csvCell).join(','), ...table.rows.map((row) => row.map(csvCell).join(','))];
+  const lines = [table.columns.map(csvCell).join(','), ...table.rows.map((row) => row.map(csvCell).join(',') )];
   return `\uFEFF${lines.join('\r\n')}\r\n`;
 }
 
