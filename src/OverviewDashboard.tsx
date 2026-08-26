@@ -11,9 +11,23 @@ import {
   monthInputToPeriod,
 } from './uiAccounting';
 
+const POSITIVE_TYPES = new Set<Transaction['type']>([
+  TransactionType.CASH_SALE,
+  TransactionType.CUSTOMER_PAYMENT,
+  TransactionType.SUPPLIER_REFUND,
+  TransactionType.CAPITAL_CONTRIBUTION,
+  TransactionType.TAX_REFUND,
+]);
+const NEGATIVE_TYPES = new Set<Transaction['type']>([
+  TransactionType.CASH_PURCHASE,
+  TransactionType.SUPPLIER_PAYMENT,
+  TransactionType.CUSTOMER_REFUND,
+  TransactionType.TAX_PAYMENT,
+]);
+
 function tone(tx: Transaction): 'positive' | 'negative' | 'neutral' {
-  if ([TransactionType.CASH_SALE, TransactionType.CUSTOMER_PAYMENT, TransactionType.SUPPLIER_REFUND, TransactionType.CAPITAL_CONTRIBUTION, TransactionType.TAX_REFUND].includes(tx.type)) return 'positive';
-  if ([TransactionType.CASH_PURCHASE, TransactionType.SUPPLIER_PAYMENT, TransactionType.CUSTOMER_REFUND, TransactionType.TAX_PAYMENT].includes(tx.type)) return 'negative';
+  if (POSITIVE_TYPES.has(tx.type)) return 'positive';
+  if (NEGATIVE_TYPES.has(tx.type)) return 'negative';
   return 'neutral';
 }
 
@@ -33,14 +47,26 @@ export function OverviewDashboard({
 
   const load = useCallback(async () => {
     try {
+      const storedAccounts = await db.accounts.orderBy('name').toArray();
+      setAccounts(storedAccounts);
+
+      // Do not create the global cutover marker on a pristine install. This keeps
+      // the first-account workflow able to capture an explicit legacy opening balance.
+      if (storedAccounts.length === 0) {
+        setBalances(new Map());
+        setRecent([]);
+        setRevenue(0);
+        setExpense(0);
+        setError(null);
+        return;
+      }
+
       const month = monthInputToPeriod(currentMonthInput());
-      const [storedAccounts, derivedBalances, storedTransactions, projection] = await Promise.all([
-        db.accounts.orderBy('name').toArray(),
+      const [derivedBalances, storedTransactions, projection] = await Promise.all([
         AccountingEngine.getBalances(),
         db.transactions.orderBy('date').reverse().limit(5).toArray(),
         accountingProjectionService.project({ start: month.start, end: month.end }),
       ]);
-      setAccounts(storedAccounts);
       setBalances(derivedBalances);
       setRecent(storedTransactions);
       setRevenue(projection.totals.revenue);
