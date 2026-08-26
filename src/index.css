@@ -83,6 +83,8 @@ p {
     --color-success-soft: #173526;
     --color-danger: #ff8d8d;
     --color-danger-soft: #472222;
+    --color-warning: #f4c35b;
+    --color-warning-soft: #443410;
     --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.25);
     --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.28);
   }
