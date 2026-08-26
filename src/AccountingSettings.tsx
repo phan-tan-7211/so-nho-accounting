@@ -5,24 +5,23 @@ import {
   ACCOUNTING_REGIME_INFO,
   AccountingProfileSchema,
   ENTITY_TYPE_LABELS,
+  INCOME_TAX_METHOD_LABELS,
+  TT58_EFFECTIVE_FROM,
+  TT58_REGIME,
+  VAT_METHOD_LABELS,
   getAllowedEntityTypes,
+  getRequiredTt58Books,
+  getTt58ApplicationBasis,
 } from './accountingProfile';
 import type {
   AccountingProfile,
-  AccountingRegime,
   EntityType,
+  IncomeTaxMethod,
+  VatMethod,
 } from './accountingProfile';
 import './AccountingSettings.css';
 
-const selectableRegimes: AccountingRegime[] = [
-  'TT152_2025_HKD',
-  'TT58_2026_MICRO',
-  'TT133_2016_SME',
-];
-
-function defaultEntityType(regime: AccountingRegime): EntityType {
-  return getAllowedEntityTypes(regime)[0];
-}
+const allowedEntityTypes = getAllowedEntityTypes();
 
 export function AccountingSettings() {
   const [profile, setProfile] = useState<AccountingProfile | null>(null);
@@ -30,22 +29,32 @@ export function AccountingSettings() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [legacyProfileDetected, setLegacyProfileDetected] = useState(false);
 
-  const [regime, setRegime] = useState<AccountingRegime>('TT152_2025_HKD');
-  const [entityType, setEntityType] = useState<EntityType>('HOUSEHOLD_BUSINESS');
-  const [dataStartDate, setDataStartDate] = useState('2026-01-01');
+  const [entityType, setEntityType] = useState<EntityType>('MICRO_ENTERPRISE');
+  const [dataStartDate, setDataStartDate] = useState(TT58_EFFECTIVE_FROM);
+  const [vatMethod, setVatMethod] = useState<VatMethod>('UNCONFIGURED');
+  const [incomeTaxMethod, setIncomeTaxMethod] = useState<IncomeTaxMethod>('UNCONFIGURED');
 
   useEffect(() => {
     let active = true;
 
     void db.accountingProfiles.get('primary').then((stored) => {
       if (!active) return;
+
       if (stored) {
-        setProfile(stored);
-        setRegime(stored.regime);
-        setEntityType(stored.entityType);
-        setDataStartDate(stored.dataStartDate);
+        const parsed = AccountingProfileSchema.safeParse(stored);
+        if (parsed.success) {
+          setProfile(parsed.data);
+          setEntityType(parsed.data.entityType);
+          setDataStartDate(parsed.data.dataStartDate);
+          setVatMethod(parsed.data.vatMethod);
+          setIncomeTaxMethod(parsed.data.incomeTaxMethod);
+        } else {
+          setLegacyProfileDetected(true);
+        }
       }
+
       setLoading(false);
     }).catch(() => {
       if (!active) return;
@@ -58,45 +67,47 @@ export function AccountingSettings() {
     };
   }, []);
 
-  const allowedEntityTypes = useMemo(() => getAllowedEntityTypes(regime), [regime]);
-  const selectedRegime = ACCOUNTING_REGIME_INFO[regime];
+  const applicationBasis = getTt58ApplicationBasis(entityType);
+  const incomeTaxName = entityType === 'MICRO_ENTERPRISE' ? 'Thuế TNDN' : 'Thuế TNCN';
 
-  function selectRegime(nextRegime: AccountingRegime) {
-    const info = ACCOUNTING_REGIME_INFO[nextRegime];
-    if (info.implementation === 'PLANNED') return;
+  const taxSelectionState = useMemo(() => {
+    const vatConfigured = vatMethod !== 'UNCONFIGURED';
+    const incomeConfigured = incomeTaxMethod !== 'UNCONFIGURED';
 
-    setRegime(nextRegime);
-    setEntityType(defaultEntityType(nextRegime));
-    setDataStartDate(info.effectiveFrom);
-    setMessage(null);
-    setError(null);
-  }
+    if (!vatConfigured && !incomeConfigured) return 'EMPTY' as const;
+    if (vatConfigured && incomeConfigured) return 'COMPLETE' as const;
+    return 'PARTIAL' as const;
+  }, [vatMethod, incomeTaxMethod]);
+
+  const requiredBooks = useMemo(() => {
+    if (taxSelectionState !== 'COMPLETE') return [];
+
+    return getRequiredTt58Books({
+      taxProfileConfigured: true,
+      vatMethod,
+      incomeTaxMethod,
+    });
+  }, [incomeTaxMethod, taxSelectionState, vatMethod]);
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage(null);
     setError(null);
 
-    if (selectedRegime.implementation === 'PLANNED') {
-      setError('Chế độ TT133 đang ở roadmap và chưa được kích hoạt trong V1.');
+    if (taxSelectionState === 'PARTIAL') {
+      setError('Hãy chọn cả phương pháp thuế GTGT và phương pháp thuế thu nhập, hoặc để cả hai ở trạng thái Chưa cấu hình.');
       return;
     }
 
     const now = Date.now();
-    const identityChanged = Boolean(profile && (
-      profile.regime !== regime
-      || profile.entityType !== entityType
-      || profile.dataStartDate !== dataStartDate
-    ));
-
     const candidate = {
       id: 'primary' as const,
-      regime,
+      regime: TT58_REGIME,
       entityType,
       dataStartDate,
-      taxProfileConfigured: identityChanged ? false : (profile?.taxProfileConfigured ?? false),
-      vatMethod: identityChanged ? 'UNCONFIGURED' : (profile?.vatMethod ?? 'UNCONFIGURED'),
-      incomeTaxMethod: identityChanged ? 'UNCONFIGURED' : (profile?.incomeTaxMethod ?? 'UNCONFIGURED'),
+      taxProfileConfigured: taxSelectionState === 'COMPLETE',
+      vatMethod,
+      incomeTaxMethod,
       createdAt: profile?.createdAt ?? now,
       updatedAt: now,
     };
@@ -111,7 +122,8 @@ export function AccountingSettings() {
     try {
       await db.accountingProfiles.put(parsed.data);
       setProfile(parsed.data);
-      setMessage('Đã lưu chế độ kế toán trên thiết bị.');
+      setLegacyProfileDetected(false);
+      setMessage('Đã lưu hồ sơ TT58 trên thiết bị.');
     } catch {
       setError('Không thể lưu thiết lập. Vui lòng thử lại.');
     } finally {
@@ -122,10 +134,10 @@ export function AccountingSettings() {
   return (
     <section className="settings-stack" aria-labelledby="accounting-regime-title">
       <div className="settings-intro">
-        <p className="eyebrow">Thiết lập nền tảng</p>
-        <h2 id="accounting-regime-title">Chế độ kế toán</h2>
+        <p className="eyebrow">Thiết lập TT58</p>
+        <h2 id="accounting-regime-title">Hồ sơ kế toán</h2>
         <p>
-          Chọn đúng chế độ trước khi nhập dữ liệu. Sổ sách và quy tắc thuế ở các phase sau sẽ được bật theo thiết lập này.
+          V1 chỉ sử dụng Thông tư 58/2026/TT-BTC. Không có lựa chọn TT152 hoặc TT133 trong ứng dụng.
         </p>
       </div>
 
@@ -133,38 +145,23 @@ export function AccountingSettings() {
         <div className="settings-card" role="status">Đang đọc thiết lập trên thiết bị…</div>
       ) : (
         <form className="settings-form" onSubmit={saveProfile}>
-          <fieldset className="regime-fieldset">
-            <legend>1. Chọn chế độ áp dụng</legend>
-            <div className="regime-list">
-              {selectableRegimes.map((item) => {
-                const info = ACCOUNTING_REGIME_INFO[item];
-                const planned = info.implementation === 'PLANNED';
-                return (
-                  <label className={`regime-option ${planned ? 'is-planned' : ''}`} key={item}>
-                    <input
-                      type="radio"
-                      name="accounting-regime"
-                      value={item}
-                      checked={regime === item}
-                      disabled={planned}
-                      onChange={() => selectRegime(item)}
-                    />
-                    <span className="regime-option__body">
-                      <span className="regime-option__topline">
-                        <strong>{info.shortLabel}</strong>
-                        {planned ? <span className="roadmap-badge">Giai đoạn sau</span> : null}
-                      </span>
-                      <span className="regime-option__title">{info.title}</span>
-                      <small>{info.description}</small>
-                    </span>
-                  </label>
-                );
-              })}
+          <div className="settings-card regime-fixed-card">
+            <div>
+              <span className="regime-kicker">Chế độ cố định</span>
+              <strong>{ACCOUNTING_REGIME_INFO.shortLabel}</strong>
+              <p>{ACCOUNTING_REGIME_INFO.description}</p>
             </div>
-          </fieldset>
+            <span className="tt58-badge">TT58</span>
+          </div>
+
+          {legacyProfileDetected ? (
+            <p className="form-alert warning" role="status">
+              Phát hiện thiết lập cũ ngoài phạm vi TT58-only. Ứng dụng không tự chuyển đổi. Hãy xác nhận lại hồ sơ bên dưới rồi bấm Lưu.
+            </p>
+          ) : null}
 
           <div className="settings-card form-section">
-            <label className="field-label" htmlFor="entity-type">2. Loại hình đơn vị</label>
+            <label className="field-label" htmlFor="entity-type">1. Loại hình đơn vị</label>
             <select
               id="entity-type"
               value={entityType}
@@ -175,39 +172,85 @@ export function AccountingSettings() {
               ))}
             </select>
 
-            <label className="field-label" htmlFor="data-start-date">3. Ngày bắt đầu dữ liệu</label>
+            <small className="field-help">
+              {applicationBasis === 'VOLUNTARY_ELECTION'
+                ? 'HKD/CNKD sử dụng app này trên cơ sở tự nguyện lựa chọn áp dụng TT58.'
+                : 'Doanh nghiệp siêu nhỏ thuộc đối tượng áp dụng chính của TT58.'}
+            </small>
+
+            <label className="field-label" htmlFor="data-start-date">2. Ngày bắt đầu dữ liệu TT58</label>
             <input
               id="data-start-date"
               type="date"
               value={dataStartDate}
-              min={selectedRegime.effectiveFrom}
+              min={TT58_EFFECTIVE_FROM}
               onChange={(event) => setDataStartDate(event.target.value)}
             />
             <small className="field-help">
-              {selectedRegime.shortLabel} được cấu hình trong app từ {selectedRegime.effectiveFrom} trở đi.
+              App không cho cấu hình dữ liệu TT58 trước {TT58_EFFECTIVE_FROM}.
             </small>
           </div>
 
-          <div className="settings-card tax-status-card">
-            <div>
-              <strong>Hồ sơ phương pháp thuế</strong>
-              <p>{profile?.taxProfileConfigured && profile.regime === regime ? 'Đã cấu hình' : 'Chưa cấu hình — sẽ thực hiện ở bước tiếp theo'}</p>
+          <fieldset className="settings-card tax-fieldset">
+            <legend>3. Phương pháp thuế</legend>
+
+            <label className="field-label" htmlFor="vat-method">Thuế GTGT</label>
+            <select
+              id="vat-method"
+              value={vatMethod}
+              onChange={(event) => setVatMethod(event.target.value as VatMethod)}
+            >
+              <option value="UNCONFIGURED">{VAT_METHOD_LABELS.UNCONFIGURED}</option>
+              <option value="PERCENT_ON_REVENUE">{VAT_METHOD_LABELS.PERCENT_ON_REVENUE}</option>
+              <option value="DEDUCTION">{VAT_METHOD_LABELS.DEDUCTION}</option>
+            </select>
+
+            <label className="field-label" htmlFor="income-tax-method">{incomeTaxName}</label>
+            <select
+              id="income-tax-method"
+              value={incomeTaxMethod}
+              onChange={(event) => setIncomeTaxMethod(event.target.value as IncomeTaxMethod)}
+            >
+              <option value="UNCONFIGURED">{INCOME_TAX_METHOD_LABELS.UNCONFIGURED}</option>
+              <option value="PERCENT_ON_REVENUE">{INCOME_TAX_METHOD_LABELS.PERCENT_ON_REVENUE}</option>
+              <option value="TAXABLE_INCOME">{INCOME_TAX_METHOD_LABELS.TAXABLE_INCOME}</option>
+            </select>
+
+            <small className="field-help">
+              Ứng dụng không tự đoán phương pháp thuế. Nếu chưa chắc, để cả hai mục ở trạng thái Chưa cấu hình.
+            </small>
+          </fieldset>
+
+          <div className="settings-card book-mapping-card">
+            <div className="book-mapping-card__heading">
+              <div>
+                <strong>Bộ sổ TT58 theo hồ sơ thuế</strong>
+                <p>{taxSelectionState === 'COMPLETE' ? 'Được xác định từ hai phương pháp thuế đã chọn.' : 'Chưa xác định vì hồ sơ thuế chưa hoàn tất.'}</p>
+              </div>
+              <span className={taxSelectionState === 'COMPLETE' ? 'status-dot configured' : 'status-dot'} aria-hidden="true"></span>
             </div>
-            <span className={profile?.taxProfileConfigured && profile.regime === regime ? 'status-dot configured' : 'status-dot'} aria-hidden="true"></span>
+
+            {requiredBooks.length > 0 ? (
+              <div className="book-chip-list" aria-label="Các sổ TT58 cần áp dụng">
+                {requiredBooks.map((book) => <span className="book-chip" key={book}>{book}</span>)}
+              </div>
+            ) : null}
           </div>
 
           {error ? <p className="form-alert error" role="alert">{error}</p> : null}
           {message ? <p className="form-alert success" role="status">{message}</p> : null}
 
           <button className="primary-button" type="submit" disabled={saving}>
-            {saving ? 'Đang lưu…' : profile ? 'Lưu thay đổi' : 'Lưu chế độ kế toán'}
+            {saving ? 'Đang lưu…' : profile ? 'Lưu thay đổi' : 'Lưu hồ sơ TT58'}
           </button>
         </form>
       )}
 
       <div className="settings-note">
         <strong>Phạm vi V1</strong>
-        <p>Hiện tại app chỉ tạo foundation cho TT152 và TT58. Chưa tuyên bố đầy đủ chứng từ, sổ hoặc báo cáo theo bất kỳ thông tư nào cho đến khi từng projection và test nghiệp vụ hoàn tất.</p>
+        <p>
+          Chỉ TT58/2026. Các mã sổ hiển thị là mapping yêu cầu theo hồ sơ thuế; từng sổ chỉ được đánh dấu “đã triển khai” khi projection dữ liệu và test nghiệp vụ tương ứng hoàn tất.
+        </p>
       </div>
     </section>
   );
