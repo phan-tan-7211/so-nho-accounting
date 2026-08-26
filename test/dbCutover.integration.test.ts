@@ -20,24 +20,13 @@ function nextDatabaseName(): string {
 }
 
 function account(balance: number): Account {
-  return {
-    id: CASH_ID,
-    name: 'Tiền mặt',
-    balance,
-    createdAt: 1,
-  };
+  return { id: CASH_ID, name: 'Tiền mặt', balance, createdAt: 1 };
 }
 
 function legacyIncome(amount: number): Transaction {
   return {
-    id: TX_ID,
-    date: 1,
-    amount,
-    type: TransactionType.INCOME,
-    destinationAccountId: CASH_ID,
-    status: 'POSTED',
-    createdAt: 1,
-    updatedAt: 1,
+    id: TX_ID, date: 1, amount, type: TransactionType.INCOME,
+    destinationAccountId: CASH_ID, status: 'POSTED', createdAt: 1, updatedAt: 1,
   };
 }
 
@@ -68,28 +57,17 @@ afterEach(async () => {
 const describeIndexedDb = process.env.CI === 'true' ? describe : describe.skip;
 
 describeIndexedDb('Dexie accounting cutover integration', () => {
-  it('upgrades V2 to V5 additively, preserves records, persists cutover, and reopens idempotently', async () => {
+  it('upgrades V2 to V6 additively, preserves records, persists cutover, and reopens idempotently', async () => {
     const name = nextDatabaseName();
     const legacy = new LegacyV2DB(name);
     const originalAccount = account(1_200);
     const originalTransaction = legacyIncome(200);
     const audit: AuditLog = {
-      id: AUDIT_ID,
-      transactionId: TX_ID,
-      action: 'CREATE',
-      timestamp: 2,
-      details: 'legacy audit',
+      id: AUDIT_ID, transactionId: TX_ID, action: 'CREATE', timestamp: 2, details: 'legacy audit',
     };
     const profile: AccountingProfile = {
-      id: 'primary',
-      regime: 'TT58_2026_MICRO',
-      entityType: 'MICRO_ENTERPRISE',
-      dataStartDate: '2026-07-01',
-      taxProfileConfigured: false,
-      vatMethod: 'UNCONFIGURED',
-      incomeTaxMethod: 'UNCONFIGURED',
-      createdAt: 1,
-      updatedAt: 1,
+      id: 'primary', regime: 'TT58_2026_MICRO', entityType: 'MICRO_ENTERPRISE', dataStartDate: '2026-07-01',
+      taxProfileConfigured: false, vatMethod: 'UNCONFIGURED', incomeTaxMethod: 'UNCONFIGURED', createdAt: 1, updatedAt: 1,
     };
 
     await legacy.open();
@@ -102,7 +80,7 @@ describeIndexedDb('Dexie accounting cutover integration', () => {
     const upgraded = new AccountingDB(name);
     await upgraded.open();
 
-    expect(upgraded.verno).toBe(5);
+    expect(upgraded.verno).toBe(6);
     expect(await upgraded.accounts.get(CASH_ID)).toEqual(originalAccount);
     expect(await upgraded.transactions.get(TX_ID)).toEqual(originalTransaction);
     expect(await upgraded.auditLogs.get(AUDIT_ID)).toEqual(audit);
@@ -110,18 +88,15 @@ describeIndexedDb('Dexie accounting cutover integration', () => {
     expect(await upgraded.taxOpeningPositions.count()).toBe(0);
     expect(await upgraded.periodLocks.count()).toBe(0);
     expect(await upgraded.periodLockEvents.count()).toBe(0);
+    expect(await upgraded.inventoryItems.count()).toBe(0);
+    expect(await upgraded.inventoryOpenings.count()).toBe(0);
+    expect(await upgraded.inventoryMovements.count()).toBe(0);
 
     const first = await runAccountingCutover(new DexieAccountingCutoverStore(upgraded));
     expect(first.status).toBe('APPLIED');
     expect(await upgraded.openingEffects.count()).toBe(1);
-    expect((await upgraded.openingEffects.toArray())[0]).toMatchObject({
-      accountId: CASH_ID,
-      amount: 1_000,
-      kind: 'OPENING_CASH',
-    });
+    expect((await upgraded.openingEffects.toArray())[0]).toMatchObject({ accountId: CASH_ID, amount: 1_000, kind: 'OPENING_CASH' });
     expect(await upgraded.migrationStates.count()).toBe(1);
-
-    // The schema/cutover does not rewrite legacy source rows.
     expect(await upgraded.accounts.get(CASH_ID)).toEqual(originalAccount);
     expect(await upgraded.transactions.get(TX_ID)).toEqual(originalTransaction);
     upgraded.close();
@@ -129,13 +104,15 @@ describeIndexedDb('Dexie accounting cutover integration', () => {
     const reopened = new AccountingDB(name);
     await reopened.open();
     const second = await runAccountingCutover(new DexieAccountingCutoverStore(reopened));
-
     expect(second.status).toBe('ALREADY_APPLIED');
     expect(await reopened.openingEffects.count()).toBe(1);
     expect(await reopened.migrationStates.count()).toBe(1);
     expect(await reopened.taxOpeningPositions.count()).toBe(0);
     expect(await reopened.periodLocks.count()).toBe(0);
     expect(await reopened.periodLockEvents.count()).toBe(0);
+    expect(await reopened.inventoryItems.count()).toBe(0);
+    expect(await reopened.inventoryOpenings.count()).toBe(0);
+    expect(await reopened.inventoryMovements.count()).toBe(0);
     reopened.close();
   });
 
@@ -144,18 +121,12 @@ describeIndexedDb('Dexie accounting cutover integration', () => {
     const legacy = new LegacyV2DB(name);
     await legacy.open();
     await legacy.table('accounts').put(account(100));
-    await legacy.table('transactions').put({
-      id: TX_ID,
-      type: TransactionType.INCOME,
-      amount: '100',
-      destinationAccountId: CASH_ID,
-    });
+    await legacy.table('transactions').put({ id: TX_ID, type: TransactionType.INCOME, amount: '100', destinationAccountId: CASH_ID });
     legacy.close();
 
     const upgraded = new AccountingDB(name);
     await upgraded.open();
     const result = await runAccountingCutover(new DexieAccountingCutoverStore(upgraded));
-
     expect(result.status).toBe('BLOCKED');
     expect(await upgraded.openingEffects.count()).toBe(0);
     expect(await upgraded.migrationStates.count()).toBe(0);
@@ -174,14 +145,8 @@ describeIndexedDb('Dexie accounting cutover integration', () => {
     const upgraded = new AccountingDB(name);
     await upgraded.open();
     const originalPut = upgraded.migrationStates.put;
-    upgraded.migrationStates.put = (async () => {
-      throw new Error('simulated Dexie marker failure');
-    }) as typeof upgraded.migrationStates.put;
-
-    await expect(
-      runAccountingCutover(new DexieAccountingCutoverStore(upgraded)),
-    ).rejects.toThrow('simulated Dexie marker failure');
-
+    upgraded.migrationStates.put = (async () => { throw new Error('simulated Dexie marker failure'); }) as typeof upgraded.migrationStates.put;
+    await expect(runAccountingCutover(new DexieAccountingCutoverStore(upgraded))).rejects.toThrow('simulated Dexie marker failure');
     expect(await upgraded.openingEffects.count()).toBe(0);
     expect(await upgraded.migrationStates.count()).toBe(0);
     upgraded.migrationStates.put = originalPut;
@@ -193,15 +158,14 @@ describeIndexedDb('Dexie accounting cutover integration', () => {
     const legacy = new LegacyV2DB(name);
     await legacy.open();
     legacy.close();
-
     const upgraded = new AccountingDB(name);
     await upgraded.open();
     const result = await runAccountingCutover(new DexieAccountingCutoverStore(upgraded));
-
     expect(result.status).toBe('APPLIED');
     expect(await upgraded.openingEffects.count()).toBe(0);
     expect(await upgraded.migrationStates.count()).toBe(1);
     expect(await upgraded.taxOpeningPositions.count()).toBe(0);
+    expect(await upgraded.inventoryItems.count()).toBe(0);
     upgraded.close();
   });
 });
