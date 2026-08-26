@@ -103,6 +103,30 @@ describe('projectInventoryS2c', () => {
     expect(book.issues.map((issue) => issue.code)).toContain('MISSING_OPENING');
   });
 
+  it('ignores and flags movements dated before the explicit opening baseline', () => {
+    const beforeOpening = movement({
+      id: 'cccccccc-cccc-4ccc-8ccc-ccccccccccc2',
+      date: 90,
+      direction: InventoryDirection.IN,
+      quantityMilli: 5_000,
+      unitCostVnd: 20_000,
+    });
+    const book = projectInventoryS2c({
+      items: [item],
+      openings: [opening],
+      movements: [beforeOpening],
+      period: { start: 100, end: 199 },
+    });
+    expect(book.status).toBe('PARTIAL');
+    expect(book.issues.map((issue) => issue.code)).toContain('MOVEMENT_BEFORE_OPENING');
+    expect(book.sections[0]).toMatchObject({
+      openingQuantityMilli: opening.quantityMilli,
+      openingValueVnd: 210_000,
+      closingQuantityMilli: opening.quantityMilli,
+      closingValueVnd: 210_000,
+    });
+  });
+
   it('flags negative stock instead of silently accepting impossible S2c balances', () => {
     const book = projectInventoryS2c({
       items: [item],
