@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
+import { AccountManager } from './AccountManager';
 import { db } from './db';
 import {
   ACCOUNTING_REGIME_INFO,
@@ -246,10 +247,12 @@ export function AccountingSettings() {
         </form>
       )}
 
+      <AccountManager />
+
       <div className="settings-note">
         <strong>Phạm vi V1</strong>
         <p>
-          Chỉ TT58/2026. Các mã sổ hiển thị là mapping yêu cầu theo hồ sơ thuế; từng sổ chỉ được đánh dấu “đã triển khai” khi projection dữ liệu và test nghiệp vụ tương ứng hoàn tất.
+          Chỉ TT58/2026. Các mã sổ hiển thị là mapping yêu cầu theo hồ sơ thuế; trạng thái runtime của từng sổ phụ thuộc dữ liệu thực tế và blocker còn thiếu.
         </p>
       </div>
     </section>
