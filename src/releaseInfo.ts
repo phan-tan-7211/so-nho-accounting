@@ -1,4 +1,4 @@
-export const RELEASE_VERSION = '1.0.0-rc.1' as const;
+export const RELEASE_VERSION = '1.0.0-rc.2' as const;
 export const RELEASE_CHANNEL = 'release-candidate' as const;
 export const RELEASE_DATE = '2026-08-26' as const;
 
