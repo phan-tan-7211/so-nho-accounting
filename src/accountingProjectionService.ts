@@ -65,12 +65,14 @@ export class AccountingProjectionService {
 
     return this.database.transaction(
       'r',
-      this.database.accounts,
-      this.database.transactions,
-      this.database.accountingProfiles,
-      this.database.openingEffects,
-      this.database.migrationStates,
-      this.database.taxOpeningPositions,
+      [
+        this.database.accounts,
+        this.database.transactions,
+        this.database.accountingProfiles,
+        this.database.openingEffects,
+        this.database.migrationStates,
+        this.database.taxOpeningPositions,
+      ],
       async () => {
         const persistedState = await this.database.migrationStates.get(
           LEGACY_OPENING_BALANCE_MIGRATION_ID,
