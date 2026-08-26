@@ -4,18 +4,12 @@ import {
 } from './accountingCutoverPersistence';
 import { AccountingProfileSchema } from './accountingProfile';
 import type { ProjectionPeriod } from './accountingProjections';
-import {
-  buildTt58ProjectionFromSnapshot,
-} from './accountingProjectionService';
+import { buildTt58ProjectionFromSnapshot } from './accountingProjectionService';
 import { db, type AccountingDB } from './db';
 import { DexieAccountingCutoverStore } from './dexieAccountingCutoverStore';
 import { findPriorInventoryValuation } from './inventoryValuationSnapshot';
 import type { TaxOpeningPosition } from './taxOpeningPosition';
-import {
-  buildTt58ReportBundle,
-  canonicalReportJson,
-  parseTt58ReportBundle,
-} from './tt58ReportExport';
+import { buildTt58ReportBundle, canonicalReportJson, parseTt58ReportBundle } from './tt58ReportExport';
 import type { Tt58ReportBundle } from './tt58ReportExport';
 
 export type PeriodLockStatus = 'LOCKED' | 'UNLOCKED';
@@ -71,9 +65,7 @@ export function findPeriodLockCoveringTimestamp(
 export class PeriodLockService {
   private readonly database: AccountingDB;
 
-  constructor(database: AccountingDB) {
-    this.database = database;
-  }
+  constructor(database: AccountingDB) { this.database = database; }
 
   async getPeriodLock(period: ProjectionPeriod): Promise<PeriodLockRecord | undefined> {
     return this.database.periodLocks.get(periodLockId(period));
@@ -99,9 +91,7 @@ export class PeriodLockService {
     }
 
     const cutover = await runAccountingCutover(new DexieAccountingCutoverStore(this.database));
-    if (cutover.status === 'BLOCKED') {
-      throw new Error(`Accounting cutover is blocked: ${cutover.issues.map((issue) => issue.code).join(', ')}`);
-    }
+    if (cutover.status === 'BLOCKED') throw new Error(`Accounting cutover is blocked: ${cutover.issues.map((issue) => issue.code).join(', ')}`);
 
     return this.database.transaction(
       'rw',
@@ -115,19 +105,20 @@ export class PeriodLockService {
         this.database.inventoryItems,
         this.database.inventoryOpenings,
         this.database.inventoryMovements,
+        this.database.partners,
+        this.database.supplementaryDebtEntries,
+        this.database.fixedAssets,
+        this.database.otherTaxEntries,
+        this.database.supplementaryEquityEntries,
         this.database.periodLocks,
         this.database.periodLockEvents,
       ],
       async () => {
         const current = await this.database.periodLocks.get(id);
-        if (current?.status === 'LOCKED') {
-          return { state: current, report: parseTt58ReportBundle(current.reportSnapshotJson), alreadyLocked: true };
-        }
+        if (current?.status === 'LOCKED') return { state: current, report: parseTt58ReportBundle(current.reportSnapshotJson), alreadyLocked: true };
 
         const migrationState = await this.database.migrationStates.get(LEGACY_OPENING_BALANCE_MIGRATION_ID);
-        if (!migrationState || migrationState.sourceSignature !== cutover.state.sourceSignature) {
-          throw new Error('Accounting cutover state changed during period lock');
-        }
+        if (!migrationState || migrationState.sourceSignature !== cutover.state.sourceSignature) throw new Error('Accounting cutover state changed during period lock');
 
         const rawProfile = await this.database.accountingProfiles.get('primary');
         if (!rawProfile) throw new Error('TT58 accounting profile is not configured');
@@ -135,13 +126,9 @@ export class PeriodLockService {
         if (!parsedProfile.success) throw new Error('Stored TT58 accounting profile is invalid');
 
         const [
-          accounts,
-          transactions,
-          openingEffects,
-          taxOpeningPositions,
-          inventoryItems,
-          inventoryOpenings,
-          inventoryMovements,
+          accounts, transactions, openingEffects, taxOpeningPositions,
+          inventoryItems, inventoryOpenings, inventoryMovements, partners,
+          supplementaryDebtEntries, fixedAssets, otherTaxEntries, supplementaryEquityEntries,
           lockedPeriods,
         ] = await Promise.all([
           this.database.accounts.toArray(),
@@ -151,6 +138,11 @@ export class PeriodLockService {
           this.database.inventoryItems.toArray(),
           this.database.inventoryOpenings.toArray(),
           this.database.inventoryMovements.toArray(),
+          this.database.partners.toArray(),
+          this.database.supplementaryDebtEntries.toArray(),
+          this.database.fixedAssets.toArray(),
+          this.database.otherTaxEntries.toArray(),
+          this.database.supplementaryEquityEntries.toArray(),
           this.database.periodLocks.where('status').equals('LOCKED').toArray(),
         ]);
 
@@ -165,6 +157,11 @@ export class PeriodLockService {
           inventoryOpenings,
           inventoryMovements,
           priorInventoryValuation: findPriorInventoryValuation(lockedPeriods, period),
+          partners,
+          supplementaryDebtEntries,
+          fixedAssets,
+          otherTaxEntries,
+          supplementaryEquityEntries,
           period,
         });
         const report = buildTt58ReportBundle({
@@ -176,18 +173,11 @@ export class PeriodLockService {
         const now = Date.now();
         const revision = (current?.revision ?? 0) + 1;
         const state: PeriodLockRecord = {
-          id,
-          periodStart: period.start,
-          periodEnd: period.end,
-          status: 'LOCKED',
-          revision,
-          lockedAt: now,
-          reportSnapshotJson: canonicalReportJson(report),
+          id, periodStart: period.start, periodEnd: period.end, status: 'LOCKED', revision,
+          lockedAt: now, reportSnapshotJson: canonicalReportJson(report),
         };
         await this.database.periodLocks.put(state);
-        await this.database.periodLockEvents.add({
-          id: crypto.randomUUID(), periodLockId: id, action: 'LOCK', revision, timestamp: now,
-        });
+        await this.database.periodLockEvents.add({ id: crypto.randomUUID(), periodLockId: id, action: 'LOCK', revision, timestamp: now });
         return { state, report, alreadyLocked: false };
       },
     );
@@ -203,9 +193,7 @@ export class PeriodLockService {
       const now = Date.now();
       const unlocked: PeriodLockRecord = { ...state, status: 'UNLOCKED', unlockedAt: now };
       await this.database.periodLocks.put(unlocked);
-      await this.database.periodLockEvents.add({
-        id: crypto.randomUUID(), periodLockId: id, action: 'UNLOCK', revision: state.revision, timestamp: now,
-      });
+      await this.database.periodLockEvents.add({ id: crypto.randomUUID(), periodLockId: id, action: 'UNLOCK', revision: state.revision, timestamp: now });
       return unlocked;
     });
   }
@@ -215,9 +203,7 @@ export class PeriodLockService {
       const locked = await this.database.periodLocks.where('status').equals('LOCKED').toArray();
       for (const record of records) {
         const conflict = findPeriodLockCoveringTimestamp(locked, record.periodStart);
-        if (conflict) {
-          throw new Error(`Cannot change tax opening position because period ${conflict.periodStart}-${conflict.periodEnd} is locked`);
-        }
+        if (conflict) throw new Error(`Cannot change tax opening position because period ${conflict.periodStart}-${conflict.periodEnd} is locked`);
       }
       await this.database.taxOpeningPositions.bulkPut([...records]);
     });
