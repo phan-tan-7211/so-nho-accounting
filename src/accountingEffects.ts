@@ -288,6 +288,8 @@ export function deriveAccountingEffects(
       return negateAccountingEffects(deriveAccountingEffects(original));
     }
   }
+
+  throw new Error(`Unsupported transaction type: ${tx.type}`);
 }
 
 export function deriveAccountingEffectsForTransactions(
