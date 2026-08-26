@@ -1,10 +1,16 @@
-import { useMemo, useState } from 'react'
-import { AccountingSettings } from './AccountingSettings'
-import './App.css'
+import { useMemo, useState } from 'react';
+import { AccountingSettings } from './AccountingSettings';
+import { BooksWorkspace } from './BooksWorkspace';
+import { OverviewDashboard } from './OverviewDashboard';
+import { TransactionWorkspace } from './TransactionWorkspace';
+import { TransactionType } from './models';
+import type { TransactionType as TransactionTypeValue } from './models';
+import './App.css';
+import './Workspace.css';
 
-type NavKey = 'overview' | 'transactions' | 'books' | 'settings'
+type NavKey = 'overview' | 'transactions' | 'books' | 'settings';
 
-type IconName = 'home' | 'transactions' | 'plus' | 'books' | 'settings' | 'income' | 'expense' | 'transfer' | 'chevron'
+type IconName = 'home' | 'transactions' | 'plus' | 'books' | 'settings' | 'income' | 'expense' | 'transfer' | 'chevron';
 
 function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
   const paths = {
@@ -17,118 +23,75 @@ function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
     expense: <><path d="M12 21V8"/><path d="m7 13 5-5 5 5"/><path d="M5 3h14"/></>,
     transfer: <><path d="M4 8h13"/><path d="m14 5 3 3-3 3"/><path d="M20 16H7"/><path d="m10 13-3 3 3 3"/></>,
     chevron: <path d="m9 18 6-6-6-6"/>,
-  }
+  };
 
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       {paths[name]}
     </svg>
-  )
+  );
 }
 
-const transactions = [
-  { title: 'Thu bán hàng', meta: 'Tiền mặt · Hôm nay', amount: '+2.450.000 ₫', tone: 'positive' },
-  { title: 'Chi mua vật tư', meta: 'Ngân hàng · Hôm qua', amount: '-780.000 ₫', tone: 'negative' },
-  { title: 'Chuyển tiền', meta: 'Tiền mặt → Ngân hàng', amount: '1.500.000 ₫', tone: 'neutral' },
-]
-
 function App() {
-  const [activeNav, setActiveNav] = useState<NavKey>('overview')
-  const [quickOpen, setQuickOpen] = useState(false)
+  const [activeNav, setActiveNav] = useState<NavKey>('overview');
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [requestedType, setRequestedType] = useState<TransactionTypeValue | undefined>();
+  const [requestToken, setRequestToken] = useState(0);
 
   const title = useMemo(() => ({
     overview: 'Tổng quan',
     transactions: 'Giao dịch',
     books: 'Sổ sách',
     settings: 'Cài đặt',
-  }[activeNav]), [activeNav])
+  }[activeNav]), [activeNav]);
+
+  function openTransaction(type: TransactionTypeValue) {
+    setRequestedType(type);
+    setRequestToken((value) => value + 1);
+    setActiveNav('transactions');
+    setQuickOpen(false);
+  }
 
   return (
     <div className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Sổ nhỏ</p>
+          <p className="eyebrow">Sổ nhỏ · TT58</p>
           <h1>{title}</h1>
         </div>
-        {activeNav !== 'settings' ? (
-          <button className="period-chip" type="button" aria-label="Chọn kỳ báo cáo">Tháng này</button>
-        ) : null}
+        {activeNav === 'overview' ? <span className="period-chip">Tháng này</span> : null}
       </header>
 
       <main className="main-content" id="main-content">
         {activeNav === 'overview' ? (
-          <>
-            <section className="balance-card" aria-labelledby="balance-title">
-              <div className="balance-card__topline">
-                <p id="balance-title">Tổng tiền hiện có</p>
-                <span className="status-pill">Đã cập nhật</span>
-              </div>
-              <p className="balance-amount">28.640.000 ₫</p>
-              <div className="balance-breakdown">
-                <div><span>Tiền mặt</span><strong>8.240.000 ₫</strong></div>
-                <div><span>Ngân hàng</span><strong>20.400.000 ₫</strong></div>
-              </div>
-            </section>
-
-            <section className="summary-grid" aria-label="Tóm tắt tháng">
-              <article className="summary-card">
-                <div className="summary-icon summary-icon--positive"><Icon name="income" size={20}/></div>
-                <div><span>Thu tháng này</span><strong>18.250.000 ₫</strong><small>Doanh thu & khoản thu</small></div>
-              </article>
-              <article className="summary-card">
-                <div className="summary-icon summary-icon--negative"><Icon name="expense" size={20}/></div>
-                <div><span>Chi tháng này</span><strong>9.870.000 ₫</strong><small>Chi phí & khoản chi</small></div>
-              </article>
-            </section>
-
-            <section className="section-block">
-              <div className="section-heading"><h2>Thao tác nhanh</h2></div>
-              <div className="quick-actions">
-                <button type="button" className="quick-action"><span className="quick-action__icon positive"><Icon name="income" /></span><span>Thu</span></button>
-                <button type="button" className="quick-action"><span className="quick-action__icon negative"><Icon name="expense" /></span><span>Chi</span></button>
-                <button type="button" className="quick-action"><span className="quick-action__icon primary"><Icon name="transfer" /></span><span>Chuyển tiền</span></button>
-              </div>
-            </section>
-
-            <section className="section-block recent-section">
-              <div className="section-heading"><h2>Giao dịch gần đây</h2><button type="button" onClick={() => setActiveNav('transactions')}>Xem tất cả</button></div>
-              <div className="transaction-list">
-                {transactions.map((tx) => (
-                  <button className="transaction-row" type="button" key={tx.title + tx.meta}>
-                    <span className={`transaction-marker ${tx.tone}`} aria-hidden="true"></span>
-                    <span className="transaction-copy"><strong>{tx.title}</strong><small>{tx.meta}</small></span>
-                    <span className={`transaction-amount ${tx.tone}`}>{tx.amount}</span>
-                    <Icon name="chevron" size={18}/>
-                  </button>
-                ))}
-              </div>
-            </section>
-          </>
-        ) : activeNav === 'settings' ? (
-          <AccountingSettings />
+          <OverviewDashboard
+            onQuickTransaction={openTransaction}
+            onOpenTransactions={() => setActiveNav('transactions')}
+          />
+        ) : activeNav === 'transactions' ? (
+          <TransactionWorkspace requestedType={requestedType} requestToken={requestToken} />
+        ) : activeNav === 'books' ? (
+          <BooksWorkspace />
         ) : (
-          <section className="placeholder-card">
-            <p className="eyebrow">Đang xây dựng</p>
-            <h2>{title}</h2>
-            <p>Khung điều hướng đã sẵn sàng. Nội dung nghiệp vụ sẽ được kết nối với dữ liệu Dexie ở phase tiếp theo.</p>
-          </section>
+          <AccountingSettings />
         )}
       </main>
 
-      {quickOpen && (
+      {quickOpen ? (
         <div className="quick-sheet" role="dialog" aria-modal="true" aria-labelledby="quick-sheet-title">
           <button className="quick-sheet__scrim" type="button" aria-label="Đóng menu thao tác" onClick={() => setQuickOpen(false)}></button>
           <div className="quick-sheet__panel">
             <div className="quick-sheet__handle" aria-hidden="true"></div>
             <h2 id="quick-sheet-title">Thêm giao dịch</h2>
             <div className="quick-sheet__actions">
-              <button type="button"><span className="quick-action__icon positive"><Icon name="income" /></span><span><strong>Thu</strong><small>Ghi nhận tiền vào</small></span><Icon name="chevron" size={18}/></button>
-              <button type="button"><span className="quick-action__icon negative"><Icon name="expense" /></span><span><strong>Chi</strong><small>Ghi nhận tiền ra</small></span><Icon name="chevron" size={18}/></button>
-              <button type="button"><span className="quick-action__icon primary"><Icon name="transfer" /></span><span><strong>Chuyển tiền</strong><small>Giữa các tài khoản</small></span><Icon name="chevron" size={18}/></button>
+              <button type="button" onClick={() => openTransaction(TransactionType.CASH_SALE)}><span className="quick-action__icon positive"><Icon name="income" /></span><span><strong>Bán thu tiền</strong><small>CASH_SALE</small></span><Icon name="chevron" size={18}/></button>
+              <button type="button" onClick={() => openTransaction(TransactionType.CASH_PURCHASE)}><span className="quick-action__icon negative"><Icon name="expense" /></span><span><strong>Mua / chi</strong><small>CASH_PURCHASE</small></span><Icon name="chevron" size={18}/></button>
+              <button type="button" onClick={() => openTransaction(TransactionType.TRANSFER)}><span className="quick-action__icon primary"><Icon name="transfer" /></span><span><strong>Chuyển tiền</strong><small>Giữa các tài khoản</small></span><Icon name="chevron" size={18}/></button>
+              <button type="button" onClick={() => openTransaction(TransactionType.TAX_PAYMENT)}><span className="quick-action__icon negative"><Icon name="expense" /></span><span><strong>Nộp thuế</strong><small>VAT / thuế thu nhập</small></span><Icon name="chevron" size={18}/></button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
       <nav className="bottom-nav" aria-label="Điều hướng chính">
         <button type="button" className={activeNav === 'overview' ? 'active' : ''} onClick={() => setActiveNav('overview')}><Icon name="home"/><span>Tổng quan</span></button>
@@ -138,7 +101,7 @@ function App() {
         <button type="button" className={activeNav === 'settings' ? 'active' : ''} onClick={() => setActiveNav('settings')}><Icon name="settings"/><span>Cài đặt</span></button>
       </nav>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
