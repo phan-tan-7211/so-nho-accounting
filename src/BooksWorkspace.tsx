@@ -323,7 +323,14 @@ export function BooksWorkspace() {
         <button className="secondary-button" type="submit" disabled={savingOpening || periodLock?.status === 'LOCKED'}>{savingOpening ? 'Đang lưu…' : 'Lưu opening thuế'}</button>
       </form>
 
-      {s2cRequired ? <InventoryWorkspace periodStart={period.start} locked={periodLock?.status === 'LOCKED'} /> : null}
+      {s2cRequired ? (
+        <InventoryWorkspace
+          key={period.start}
+          periodStart={period.start}
+          locked={periodLock?.status === 'LOCKED'}
+          onChanged={load}
+        />
+      ) : null}
 
       {error ? <p className="form-alert error" role="alert">{error}</p> : null}
       {message ? <p className="form-alert success" role="status">{message}</p> : null}
