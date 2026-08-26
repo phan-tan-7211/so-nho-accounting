@@ -6,6 +6,7 @@ import type {
   LegacyOpeningBalanceMigrationRecord,
   OpeningEffectRecord,
 } from './accountingCutoverPersistence';
+import type { TaxOpeningPosition } from './taxOpeningPosition';
 
 export class AccountingDB extends Dexie {
   accounts!: Table<Account, string>;
@@ -14,6 +15,7 @@ export class AccountingDB extends Dexie {
   accountingProfiles!: Table<AccountingProfile, string>;
   openingEffects!: Table<OpeningEffectRecord, string>;
   migrationStates!: Table<LegacyOpeningBalanceMigrationRecord, string>;
+  taxOpeningPositions!: Table<TaxOpeningPosition, string>;
 
   constructor(name = 'AccountingDB') {
     super(name);
@@ -45,6 +47,18 @@ export class AccountingDB extends Dexie {
       accountingProfiles: 'id, regime, entityType, dataStartDate',
       openingEffects: 'id, migrationId, migrationVersion, accountId, kind',
       migrationStates: 'id, version',
+    });
+
+    // V4 is also additive. Tax opening positions are explicit period-start facts;
+    // they are never inferred from legacy balances or previous tax activity.
+    this.version(4).stores({
+      accounts: 'id, name',
+      transactions: 'id, date, type, sourceAccountId, destinationAccountId, status',
+      auditLogs: 'id, transactionId, timestamp',
+      accountingProfiles: 'id, regime, entityType, dataStartDate',
+      openingEffects: 'id, migrationId, migrationVersion, accountId, kind',
+      migrationStates: 'id, version',
+      taxOpeningPositions: 'id, taxType, periodStart',
     });
   }
 }

@@ -13,6 +13,8 @@ import {
 } from './tt58BookProjections';
 import { applyMaterializedBookReadiness } from './tt58CapabilityReadiness';
 import { materializeTt58Books } from './tt58MaterializedBooks';
+import { projectTt58TaxSettlements } from './taxSettlement';
+import { finalizeTt58BooksWithTaxSettlement } from './tt58TaxSettledBooks';
 
 export class AccountingProjectionService {
   private readonly database: AccountingDB;
@@ -63,11 +65,14 @@ export class AccountingProjectionService {
 
     return this.database.transaction(
       'r',
-      this.database.accounts,
-      this.database.transactions,
-      this.database.accountingProfiles,
-      this.database.openingEffects,
-      this.database.migrationStates,
+      [
+        this.database.accounts,
+        this.database.transactions,
+        this.database.accountingProfiles,
+        this.database.openingEffects,
+        this.database.migrationStates,
+        this.database.taxOpeningPositions,
+      ],
       async () => {
         const persistedState = await this.database.migrationStates.get(
           LEGACY_OPENING_BALANCE_MIGRATION_ID,
@@ -82,13 +87,14 @@ export class AccountingProjectionService {
         if (!parsedProfile.success) throw new Error('Stored TT58 accounting profile is invalid');
         const profile = parsedProfile.data;
 
-        const [accounts, transactions, openingEffects] = await Promise.all([
+        const [accounts, transactions, openingEffects, taxOpeningPositions] = await Promise.all([
           this.database.accounts.toArray(),
           this.database.transactions.toArray(),
           this.database.openingEffects
             .where('migrationId')
             .equals(LEGACY_OPENING_BALANCE_MIGRATION_ID)
             .toArray(),
+          this.database.taxOpeningPositions.toArray(),
         ]);
 
         const projection = projectAccountingDimensions({
@@ -96,7 +102,7 @@ export class AccountingProjectionService {
           legacyTransactionIds: persistedState.legacyTransactionIds,
           period,
         });
-        const materializedBooks = materializeTt58Books({
+        const baseBooks = materializeTt58Books({
           profile,
           projection,
           accounts,
@@ -104,6 +110,21 @@ export class AccountingProjectionService {
           openingEffects,
           legacyTransactionIds: persistedState.legacyTransactionIds,
           period,
+        });
+        const taxSettlements = projectTt58TaxSettlements({
+          profile,
+          projection,
+          transactions,
+          taxOpeningPositions,
+          materializedBooks: baseBooks,
+          period,
+        });
+        const materializedBooks = finalizeTt58BooksWithTaxSettlement({
+          profile,
+          projection,
+          transactions,
+          books: baseBooks,
+          settlements: taxSettlements,
         });
         const capabilities = applyMaterializedBookReadiness(
           getTt58BookCapabilities(profile),
@@ -115,6 +136,7 @@ export class AccountingProjectionService {
           capabilities,
           projection,
           activities: projectTt58CoreActivities(projection),
+          taxSettlements,
           materializedBooks,
         };
       },
