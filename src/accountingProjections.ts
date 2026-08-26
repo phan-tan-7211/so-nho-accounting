@@ -22,7 +22,13 @@ export interface AccountingJournalEntry {
   type: Transaction['type'];
   status: Transaction['status'];
   invoiceNumber?: string;
+  documentNumber?: string;
   description?: string;
+  taxActivityLabel?: string;
+  vatRevenueRate?: number;
+  incomeTaxRevenueRate?: number;
+  vatDeductible?: boolean;
+  tt58ExpenseCategory?: Transaction['tt58ExpenseCategory'];
   effects: readonly AccountingEffect[];
 }
 
@@ -127,19 +133,28 @@ export function deriveSemanticAccountingEntries(
   const semanticById = new Map(semanticTransactions.map((tx) => [tx.id, tx]));
 
   return semanticTransactions
-    .map((tx): AccountingJournalEntry => ({
-      transactionId: tx.id,
-      date: tx.date,
-      type: tx.type,
-      status: tx.status,
-      invoiceNumber: tx.invoiceNumber,
-      description: tx.description,
-      effects: deriveAccountingEffects(tx, {
-        originalTransaction: tx.reversalOfTransactionId
-          ? semanticById.get(tx.reversalOfTransactionId)
-          : undefined,
-      }),
-    }))
+    .map((tx): AccountingJournalEntry => {
+      const originalTransaction = tx.reversalOfTransactionId
+        ? semanticById.get(tx.reversalOfTransactionId)
+        : undefined;
+      const classificationSource = originalTransaction ?? tx;
+
+      return {
+        transactionId: tx.id,
+        date: tx.date,
+        type: tx.type,
+        status: tx.status,
+        invoiceNumber: tx.invoiceNumber,
+        documentNumber: tx.documentNumber,
+        description: tx.description,
+        taxActivityLabel: classificationSource.taxActivityLabel,
+        vatRevenueRate: classificationSource.vatRevenueRate,
+        incomeTaxRevenueRate: classificationSource.incomeTaxRevenueRate,
+        vatDeductible: classificationSource.vatDeductible,
+        tt58ExpenseCategory: classificationSource.tt58ExpenseCategory,
+        effects: deriveAccountingEffects(tx, { originalTransaction }),
+      };
+    })
     .filter((entry) => entry.effects.length > 0)
     .sort((a, b) => a.date - b.date || a.transactionId.localeCompare(b.transactionId));
 }
