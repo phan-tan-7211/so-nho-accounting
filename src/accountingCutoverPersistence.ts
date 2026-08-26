@@ -82,6 +82,17 @@ function toMigrationRecord(
   };
 }
 
+function canonicalOpeningEffectRecord(record: OpeningEffectRecord) {
+  return {
+    id: record.id,
+    migrationId: record.migrationId,
+    migrationVersion: record.migrationVersion,
+    kind: record.kind,
+    accountId: record.accountId,
+    amount: record.amount,
+  };
+}
+
 function assertPersistedCutoverIntegrity(
   state: LegacyOpeningBalanceMigrationRecord,
   persistedEffects: readonly OpeningEffectRecord[],
@@ -90,8 +101,10 @@ function assertPersistedCutoverIntegrity(
     throw new Error(`Unsupported accounting cutover migration version ${state.version}`);
   }
 
-  const expected = toOpeningEffectRecords(state.openingEffects);
-  const actual = [...persistedEffects].sort((a, b) => a.accountId.localeCompare(b.accountId));
+  const expected = toOpeningEffectRecords(state.openingEffects).map(canonicalOpeningEffectRecord);
+  const actual = [...persistedEffects]
+    .sort((a, b) => a.accountId.localeCompare(b.accountId))
+    .map(canonicalOpeningEffectRecord);
 
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     throw new Error(
