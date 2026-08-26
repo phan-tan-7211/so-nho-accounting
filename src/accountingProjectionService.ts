@@ -2,12 +2,14 @@ import {
   LEGACY_OPENING_BALANCE_MIGRATION_ID,
   runAccountingCutover,
 } from './accountingCutoverPersistence';
-import { AccountingProfileSchema } from './accountingProfile';
+import { AccountingProfileSchema, getRequiredTt58Books } from './accountingProfile';
 import type { AccountingProfile } from './accountingProfile';
 import { projectAccountingDimensions } from './accountingProjections';
 import type { ProjectionPeriod } from './accountingProjections';
 import { db, type AccountingDB } from './db';
 import { DexieAccountingCutoverStore } from './dexieAccountingCutoverStore';
+import { projectInventoryS2c } from './inventory';
+import type { InventoryItem, InventoryMovement, InventoryOpening } from './inventory';
 import {
   getTt58BookCapabilities,
   projectTt58CoreActivities,
@@ -27,6 +29,9 @@ export interface Tt58ProjectionSnapshotInput {
   openingEffects: readonly OpeningEffectRecord[];
   legacyTransactionIds: readonly string[];
   taxOpeningPositions: readonly TaxOpeningPosition[];
+  inventoryItems: readonly InventoryItem[];
+  inventoryOpenings: readonly InventoryOpening[];
+  inventoryMovements: readonly InventoryMovement[];
   period: ProjectionPeriod;
 }
 
@@ -60,6 +65,14 @@ export function buildTt58ProjectionFromSnapshot(input: Tt58ProjectionSnapshotInp
     books: baseBooks,
     settlements: taxSettlements,
   });
+  if (getRequiredTt58Books(input.profile).includes('S2c-DNSN')) {
+    materializedBooks.s2c = projectInventoryS2c({
+      items: input.inventoryItems,
+      openings: input.inventoryOpenings,
+      movements: input.inventoryMovements,
+      period: input.period,
+    });
+  }
   const capabilities = applyMaterializedBookReadiness(
     getTt58BookCapabilities(input.profile),
     materializedBooks,
@@ -131,6 +144,9 @@ export class AccountingProjectionService {
         this.database.openingEffects,
         this.database.migrationStates,
         this.database.taxOpeningPositions,
+        this.database.inventoryItems,
+        this.database.inventoryOpenings,
+        this.database.inventoryMovements,
       ],
       async () => {
         const persistedState = await this.database.migrationStates.get(
@@ -145,7 +161,15 @@ export class AccountingProjectionService {
         const parsedProfile = AccountingProfileSchema.safeParse(rawProfile);
         if (!parsedProfile.success) throw new Error('Stored TT58 accounting profile is invalid');
 
-        const [accounts, transactions, openingEffects, taxOpeningPositions] = await Promise.all([
+        const [
+          accounts,
+          transactions,
+          openingEffects,
+          taxOpeningPositions,
+          inventoryItems,
+          inventoryOpenings,
+          inventoryMovements,
+        ] = await Promise.all([
           this.database.accounts.toArray(),
           this.database.transactions.toArray(),
           this.database.openingEffects
@@ -153,6 +177,9 @@ export class AccountingProjectionService {
             .equals(LEGACY_OPENING_BALANCE_MIGRATION_ID)
             .toArray(),
           this.database.taxOpeningPositions.toArray(),
+          this.database.inventoryItems.toArray(),
+          this.database.inventoryOpenings.toArray(),
+          this.database.inventoryMovements.toArray(),
         ]);
 
         return buildTt58ProjectionFromSnapshot({
@@ -162,6 +189,9 @@ export class AccountingProjectionService {
           openingEffects,
           legacyTransactionIds: persistedState.legacyTransactionIds,
           taxOpeningPositions,
+          inventoryItems,
+          inventoryOpenings,
+          inventoryMovements,
           period,
         });
       },

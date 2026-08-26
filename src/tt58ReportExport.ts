@@ -1,5 +1,6 @@
 import type { AccountingProfile } from './accountingProfile';
 import type { ProjectionPeriod } from './accountingProjections';
+import { formatInventoryQuantity } from './inventory';
 import type { Tt58RuntimeBookCapability } from './tt58CapabilityReadiness';
 import type { Tt58FinalMaterializedBooks } from './tt58TaxSettledBooks';
 
@@ -63,64 +64,30 @@ function revenueTable(
   for (const group of book.groups) {
     for (const row of group.rows) {
       rows.push([
-        'ENTRY',
-        dateCell(row.date),
-        row.documentNumber ?? '',
-        row.description ?? '',
-        row.activityLabel,
-        row.taxRevenueAmount,
-        row.vatRevenueRate ?? '',
-        row.incomeTaxRevenueRate ?? '',
+        'ENTRY', dateCell(row.date), row.documentNumber ?? '', row.description ?? '',
+        row.activityLabel, row.taxRevenueAmount, row.vatRevenueRate ?? '', row.incomeTaxRevenueRate ?? '',
       ]);
     }
   }
-  rows.push([
-    'TOTAL',
-    '',
-    '',
-    '',
-    '',
-    book.totalRevenue,
-    book.totalVatTaxDue ?? '',
-    book.totalIncomeTaxDue ?? '',
-  ]);
+  rows.push(['TOTAL', '', '', '', '', book.totalRevenue, book.totalVatTaxDue ?? '', book.totalIncomeTaxDue ?? '']);
   if ('taxSettlement' in book && book.taxSettlement) {
-    for (const summary of settledRows(book.taxSettlement)) {
-      rows.push([summary[0]!, '', '', '', '', summary[1]!, '', '']);
-    }
+    for (const summary of settledRows(book.taxSettlement)) rows.push([summary[0]!, '', '', '', '', summary[1]!, '', '']);
   }
   return {
     code,
     title,
-    columns: [
-      'rowType',
-      'date',
-      'documentNumber',
-      'description',
-      'activityLabel',
-      'taxRevenueAmount',
-      'vatRevenueRatePercent',
-      'incomeTaxRevenueRatePercent',
-    ],
+    columns: ['rowType', 'date', 'documentNumber', 'description', 'activityLabel', 'taxRevenueAmount', 'vatRevenueRatePercent', 'incomeTaxRevenueRatePercent'],
     rows,
   };
 }
 
 function s2bTable(title: string, book: NonNullable<Tt58FinalMaterializedBooks['s2b']>): Tt58ReportTable {
   const rows: ReportCell[][] = book.rows.map((row) => [
-    'ENTRY',
-    dateCell(row.date),
-    row.documentNumber ?? '',
-    row.description ?? '',
-    row.section,
-    row.expenseCategory ?? '',
-    row.amount,
+    'ENTRY', dateCell(row.date), row.documentNumber ?? '', row.description ?? '', row.section, row.expenseCategory ?? '', row.amount,
   ]);
   rows.push(['TOTAL_REVENUE', '', '', '', 'REVENUE', '', book.revenueTotal]);
   rows.push(['TOTAL_EXPENSE', '', '', '', 'EXPENSE', '', book.expenseTotal]);
-  for (const summary of settledRows(book.taxSettlement)) {
-    rows.push([summary[0]!, '', '', '', 'INCOME_TAX', '', summary[1]!]);
-  }
+  for (const summary of settledRows(book.taxSettlement)) rows.push([summary[0]!, '', '', '', 'INCOME_TAX', '', summary[1]!]);
   return {
     code: 'S2b-DNSN',
     title,
@@ -129,80 +96,62 @@ function s2bTable(title: string, book: NonNullable<Tt58FinalMaterializedBooks['s
   };
 }
 
-function s2dTable(title: string, book: NonNullable<Tt58FinalMaterializedBooks['s2d']>): Tt58ReportTable {
+function s2cTable(title: string, book: NonNullable<Tt58FinalMaterializedBooks['s2c']>): Tt58ReportTable {
   const rows: ReportCell[][] = [];
   for (const section of book.sections) {
     rows.push([
-      'OPENING',
-      section.accountId,
-      section.accountName,
-      section.accountKind ?? '',
-      '',
-      '',
-      '',
-      0,
-      0,
-      section.openingBalance,
+      'OPENING', section.itemCode, section.itemName, section.unit, '', '', '',
+      formatInventoryQuantity(section.openingQuantityMilli), '', section.openingValueVnd,
+      formatInventoryQuantity(section.openingQuantityMilli), section.openingValueVnd,
     ]);
     for (const row of section.rows) {
       rows.push([
-        'ENTRY',
-        section.accountId,
-        section.accountName,
-        section.accountKind ?? '',
-        dateCell(row.date),
-        row.documentNumber ?? '',
-        row.description ?? '',
-        row.moneyIn,
-        row.moneyOut,
-        row.balance,
+        'ENTRY', section.itemCode, section.itemName, section.unit, dateCell(row.date),
+        row.documentNumber ?? '', row.description ?? '', formatInventoryQuantity(row.quantityMilli),
+        row.direction, row.valueVnd, formatInventoryQuantity(row.quantityBalanceMilli), row.valueBalanceVnd,
       ]);
     }
     rows.push([
-      'TOTAL',
-      section.accountId,
-      section.accountName,
-      section.accountKind ?? '',
-      '',
-      '',
-      '',
-      section.totalIn,
-      section.totalOut,
-      section.closingBalance,
+      'TOTAL', section.itemCode, section.itemName, section.unit, '', '', '',
+      `IN ${formatInventoryQuantity(section.inboundQuantityMilli)} / OUT ${formatInventoryQuantity(section.outboundQuantityMilli)}`,
+      '', section.inboundValueVnd - section.outboundValueVnd,
+      formatInventoryQuantity(section.closingQuantityMilli), section.closingValueVnd,
     ]);
+  }
+  return {
+    code: 'S2c-DNSN',
+    title,
+    columns: [
+      'rowType', 'itemCode', 'itemName', 'unit', 'date', 'documentNumber', 'description',
+      'quantity', 'direction', 'movementValueVnd', 'quantityBalance', 'valueBalanceVnd',
+    ],
+    rows,
+  };
+}
+
+function s2dTable(title: string, book: NonNullable<Tt58FinalMaterializedBooks['s2d']>): Tt58ReportTable {
+  const rows: ReportCell[][] = [];
+  for (const section of book.sections) {
+    rows.push(['OPENING', section.accountId, section.accountName, section.accountKind ?? '', '', '', '', 0, 0, section.openingBalance]);
+    for (const row of section.rows) {
+      rows.push(['ENTRY', section.accountId, section.accountName, section.accountKind ?? '', dateCell(row.date), row.documentNumber ?? '', row.description ?? '', row.moneyIn, row.moneyOut, row.balance]);
+    }
+    rows.push(['TOTAL', section.accountId, section.accountName, section.accountKind ?? '', '', '', '', section.totalIn, section.totalOut, section.closingBalance]);
   }
   return {
     code: 'S2d-DNSN',
     title,
-    columns: [
-      'rowType',
-      'accountId',
-      'accountName',
-      'accountKind',
-      'date',
-      'documentNumber',
-      'description',
-      'moneyIn',
-      'moneyOut',
-      'balance',
-    ],
+    columns: ['rowType', 'accountId', 'accountName', 'accountKind', 'date', 'documentNumber', 'description', 'moneyIn', 'moneyOut', 'balance'],
     rows,
   };
 }
 
 function s3bTable(title: string, book: NonNullable<Tt58FinalMaterializedBooks['s3b']>): Tt58ReportTable {
   const rows: ReportCell[][] = book.rows.map((row) => [
-    'ENTRY',
-    dateCell(row.date),
-    row.documentNumber ?? '',
-    row.description ?? '',
-    row.deductibleVatInput,
-    row.vatOutput,
+    'ENTRY', dateCell(row.date), row.documentNumber ?? '', row.description ?? '', row.deductibleVatInput, row.vatOutput,
   ]);
   rows.push(['TOTAL', '', '', '', book.deductibleVatInputTotal, book.vatOutputTotal]);
-  for (const summary of settledRows(book.taxSettlement)) {
-    rows.push([summary[0]!, '', '', '', '', summary[1]!]);
-  }
+  for (const summary of settledRows(book.taxSettlement)) rows.push([summary[0]!, '', '', '', '', summary[1]!]);
   return {
     code: 'S3b-DNSN',
     title,
@@ -246,6 +195,10 @@ export function buildTt58ReportBundle(input: BuildTt58ReportInput): Tt58ReportBu
       case 'S2b-DNSN':
         if (!input.materializedBooks.s2b) throw new Error('S2b-DNSN materialized book is missing');
         tables.push(s2bTable(capability.name, input.materializedBooks.s2b));
+        break;
+      case 'S2c-DNSN':
+        if (!input.materializedBooks.s2c) throw new Error('S2c-DNSN materialized book is missing');
+        tables.push(s2cTable(capability.name, input.materializedBooks.s2c));
         break;
       case 'S2d-DNSN':
         if (!input.materializedBooks.s2d) throw new Error('S2d-DNSN materialized book is missing');
@@ -298,17 +251,12 @@ function csvCell(value: ReportCell): string {
 }
 
 export function reportTableToCsv(table: Tt58ReportTable): string {
-  const lines = [
-    table.columns.map(csvCell).join(','),
-    ...table.rows.map((row) => row.map(csvCell).join(',')),
-  ];
+  const lines = [table.columns.map(csvCell).join(','), ...table.rows.map((row) => row.map(csvCell).join(','))];
   return `\uFEFF${lines.join('\r\n')}\r\n`;
 }
 
 export function parseTt58ReportBundle(json: string): Tt58ReportBundle {
   const parsed = JSON.parse(json) as Tt58ReportBundle;
-  if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.tables)) {
-    throw new Error('Stored TT58 report snapshot is invalid');
-  }
+  if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.tables)) throw new Error('Stored TT58 report snapshot is invalid');
   return parsed;
 }

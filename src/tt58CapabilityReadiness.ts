@@ -25,6 +25,8 @@ function bookForCode(
       return books.s2a;
     case 'S2b-DNSN':
       return books.s2b;
+    case 'S2c-DNSN':
+      return 's2c' in books ? books.s2c : undefined;
     case 'S2d-DNSN':
       return books.s2d;
     case 'S3a-DNSN':

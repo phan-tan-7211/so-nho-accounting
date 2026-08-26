@@ -4,6 +4,7 @@ import type {
   AccountingDimensionProjection,
   AccountingJournalEntry,
 } from './accountingProjections';
+import type { InventoryS2cBook } from './inventory';
 import type { Transaction } from './models';
 import type { TaxSettlementSummary, Tt58TaxSettlementBundle } from './taxSettlement';
 import type {
@@ -36,6 +37,7 @@ export interface Tt58FinalMaterializedBooks {
   s1?: Tt58RevenueTaxBook;
   s2a?: Tt58SettledRevenueTaxBook;
   s2b?: Tt58SettledS2bBook;
+  s2c?: InventoryS2cBook;
   s2d?: Tt58S2dBook;
   s3a?: Tt58SettledRevenueTaxBook;
   s3b?: Tt58SettledS3bBook;
