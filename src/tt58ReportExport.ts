@@ -17,6 +17,8 @@ export interface Tt58ReportBundle {
   schemaVersion: 1;
   regime: AccountingProfile['regime'];
   entityType: AccountingProfile['entityType'];
+  entityName?: string;
+  entityAddress?: string;
   vatMethod: AccountingProfile['vatMethod'];
   incomeTaxMethod: AccountingProfile['incomeTaxMethod'];
   periodStart: number;
@@ -68,6 +70,10 @@ function revenueTable(
         row.activityLabel, row.taxRevenueAmount, row.vatRevenueRate ?? '', row.incomeTaxRevenueRate ?? '',
       ]);
     }
+    rows.push([
+      'GROUP_TOTAL', '', '', '', group.activityLabel, group.totalRevenue,
+      group.vatTaxDue ?? '', group.incomeTaxDue ?? '',
+    ]);
   }
   rows.push(['TOTAL', '', '', '', '', book.totalRevenue, book.totalVatTaxDue ?? '', book.totalIncomeTaxDue ?? '']);
   if ('taxSettlement' in book && book.taxSettlement) {
@@ -76,7 +82,7 @@ function revenueTable(
   return {
     code,
     title,
-    columns: ['rowType', 'date', 'documentNumber', 'description', 'activityLabel', 'taxRevenueAmount', 'vatRevenueRatePercent', 'incomeTaxRevenueRatePercent'],
+    columns: ['rowType', 'date', 'documentNumber', 'description', 'activityLabel', 'taxRevenueAmount', 'vatTaxDueOrRate', 'incomeTaxDueOrRate'],
     rows,
   };
 }
@@ -221,6 +227,8 @@ export function buildTt58ReportBundle(input: BuildTt58ReportInput): Tt58ReportBu
     schemaVersion: 1,
     regime: input.profile.regime,
     entityType: input.profile.entityType,
+    entityName: input.profile.entityName,
+    entityAddress: input.profile.entityAddress,
     vatMethod: input.profile.vatMethod,
     incomeTaxMethod: input.profile.incomeTaxMethod,
     periodStart: input.period.start,
