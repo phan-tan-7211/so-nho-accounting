@@ -11,6 +11,8 @@ import {
   getTt58BookCapabilities,
   projectTt58CoreActivities,
 } from './tt58BookProjections';
+import { applyMaterializedBookReadiness } from './tt58CapabilityReadiness';
+import { materializeTt58Books } from './tt58MaterializedBooks';
 
 export class AccountingProjectionService {
   private readonly database: AccountingDB;
@@ -57,24 +59,66 @@ export class AccountingProjectionService {
   }
 
   async buildTt58Projection(period: ProjectionPeriod) {
-    const projection = await this.project(period);
-    const rawProfile = await this.database.accountingProfiles.get('primary');
-    if (!rawProfile) {
-      throw new Error('TT58 accounting profile is not configured');
-    }
+    const state = await this.ensureCutover();
 
-    const parsedProfile = AccountingProfileSchema.safeParse(rawProfile);
-    if (!parsedProfile.success) {
-      throw new Error('Stored TT58 accounting profile is invalid');
-    }
+    return this.database.transaction(
+      'r',
+      this.database.accounts,
+      this.database.transactions,
+      this.database.accountingProfiles,
+      this.database.openingEffects,
+      this.database.migrationStates,
+      async () => {
+        const persistedState = await this.database.migrationStates.get(
+          LEGACY_OPENING_BALANCE_MIGRATION_ID,
+        );
+        if (!persistedState || persistedState.sourceSignature !== state.sourceSignature) {
+          throw new Error('Accounting cutover state changed during TT58 projection');
+        }
 
-    const profile = parsedProfile.data;
-    return {
-      profile,
-      capabilities: getTt58BookCapabilities(profile),
-      projection,
-      activities: projectTt58CoreActivities(projection),
-    };
+        const rawProfile = await this.database.accountingProfiles.get('primary');
+        if (!rawProfile) throw new Error('TT58 accounting profile is not configured');
+        const parsedProfile = AccountingProfileSchema.safeParse(rawProfile);
+        if (!parsedProfile.success) throw new Error('Stored TT58 accounting profile is invalid');
+        const profile = parsedProfile.data;
+
+        const [accounts, transactions, openingEffects] = await Promise.all([
+          this.database.accounts.toArray(),
+          this.database.transactions.toArray(),
+          this.database.openingEffects
+            .where('migrationId')
+            .equals(LEGACY_OPENING_BALANCE_MIGRATION_ID)
+            .toArray(),
+        ]);
+
+        const projection = projectAccountingDimensions({
+          transactions,
+          legacyTransactionIds: persistedState.legacyTransactionIds,
+          period,
+        });
+        const materializedBooks = materializeTt58Books({
+          profile,
+          projection,
+          accounts,
+          transactions,
+          openingEffects,
+          legacyTransactionIds: persistedState.legacyTransactionIds,
+          period,
+        });
+        const capabilities = applyMaterializedBookReadiness(
+          getTt58BookCapabilities(profile),
+          materializedBooks,
+        );
+
+        return {
+          profile,
+          capabilities,
+          projection,
+          activities: projectTt58CoreActivities(projection),
+          materializedBooks,
+        };
+      },
+    );
   }
 }
 
