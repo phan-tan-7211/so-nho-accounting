@@ -42,7 +42,7 @@ describe('TT58 XLSX renderer', () => {
     expect(() => buildTt58Xlsx({ ...base, entityAddress: ' ' })).toThrow(/Đơn vị và Địa chỉ/);
   });
 
-  it('creates a separate S2c worksheet for each inventory item section', () => {
+  it('creates separate S2c sheets and prints the derived unit price in column E', () => {
     const report: Tt58ReportBundle = {
       ...base,
       vatMethod: 'PERCENT_ON_REVENUE',
@@ -52,11 +52,12 @@ describe('TT58 XLSX renderer', () => {
         title: 'Sổ chi tiết vật liệu, dụng cụ, sản phẩm, hàng hóa',
         columns: [],
         rows: [
-          ['OPENING', 'HH01', 'Hàng A', 'kg', '', '', '', '2', '', 20_000, '2', 20_000],
-          ['ENTRY', 'HH01', 'Hàng A', 'kg', '2026-07-03', 'NK01', 'Nhập', '1', 'IN', 10_000, '3', 30_000],
-          ['TOTAL', 'HH01', 'Hàng A', 'kg', '', '', '', '', '', 10_000, '3', 30_000],
-          ['OPENING', 'HH02', 'Hàng B', 'cái', '', '', '', '1', '', 5_000, '1', 5_000],
-          ['TOTAL', 'HH02', 'Hàng B', 'cái', '', '', '', '', '', 0, '1', 5_000],
+          ['OPENING', 'HH01', 'Hàng A', 'kg', '', '', '', '2', '', 20_000, '2', 20_000, 10_000, '', ''],
+          ['ENTRY', 'HH01', 'Hàng A', 'kg', '2026-07-03', 'NK01', 'Nhập', '1', 'IN', 10_000, '3', 30_000, 10_000, 10_000, ''],
+          ['ENTRY', 'HH01', 'Hàng A', 'kg', '2026-07-10', 'XK01', 'Xuất', '1', 'OUT', 20_320, '2', 9_680, 20_320, 0, ''],
+          ['TOTAL', 'HH01', 'Hàng A', 'kg', '', '', '', '', '', -10_320, '2', 9_680, 20_320, 20_320, 'TT58_PERIOD_AVERAGE_V1'],
+          ['OPENING', 'HH02', 'Hàng B', 'cái', '', '', '', '1', '', 5_000, '1', 5_000, 5_000, '', ''],
+          ['TOTAL', 'HH02', 'Hàng B', 'cái', '', '', '', '', '', 0, '1', 5_000, 5_000, 0, 'TT58_PERIOD_AVERAGE_V1'],
         ],
       }],
     };
@@ -65,6 +66,7 @@ describe('TT58 XLSX renderer', () => {
     expect(text).toContain('sheet2.xml');
     expect(text).toContain('S2c-HH01');
     expect(text).toContain('S2c-HH02-2');
+    expect(text).toContain('<c r="E10" s="4"><v>20320</v></c>');
   });
 
   it('marks draft output and generates stable filenames', () => {
