@@ -35,6 +35,8 @@ export function AccountingSettings() {
   const [legacyProfileDetected, setLegacyProfileDetected] = useState(false);
 
   const [entityType, setEntityType] = useState<EntityType>('MICRO_ENTERPRISE');
+  const [entityName, setEntityName] = useState('');
+  const [entityAddress, setEntityAddress] = useState('');
   const [dataStartDate, setDataStartDate] = useState<string>(TT58_EFFECTIVE_FROM);
   const [vatMethod, setVatMethod] = useState<VatMethod>('UNCONFIGURED');
   const [incomeTaxMethod, setIncomeTaxMethod] = useState<IncomeTaxMethod>('UNCONFIGURED');
@@ -50,6 +52,8 @@ export function AccountingSettings() {
         if (parsed.success) {
           setProfile(parsed.data);
           setEntityType(parsed.data.entityType);
+          setEntityName(parsed.data.entityName ?? '');
+          setEntityAddress(parsed.data.entityAddress ?? '');
           setDataStartDate(parsed.data.dataStartDate);
           setVatMethod(parsed.data.vatMethod);
           setIncomeTaxMethod(parsed.data.incomeTaxMethod);
@@ -107,6 +111,8 @@ export function AccountingSettings() {
       id: 'primary' as const,
       regime: TT58_REGIME,
       entityType,
+      entityName: entityName.trim() || undefined,
+      entityAddress: entityAddress.trim() || undefined,
       dataStartDate,
       taxProfileConfigured: taxSelectionState === 'COMPLETE',
       vatMethod,
@@ -162,6 +168,15 @@ export function AccountingSettings() {
               Phát hiện thiết lập cũ ngoài phạm vi TT58-only. Ứng dụng không tự chuyển đổi. Hãy xác nhận lại hồ sơ bên dưới rồi bấm Lưu.
             </p>
           ) : null}
+
+          <div className="settings-card form-section">
+            <strong>Thông tin in trên sổ TT58</strong>
+            <small className="field-help">XLSX chính thức chỉ được tạo từ snapshot có đủ Đơn vị và Địa chỉ. Ứng dụng không tự bịa thông tin này.</small>
+            <label className="field-label" htmlFor="entity-name">Đơn vị</label>
+            <input id="entity-name" value={entityName} maxLength={200} placeholder="Tên doanh nghiệp / hộ / cá nhân kinh doanh" onChange={(event) => setEntityName(event.target.value)} />
+            <label className="field-label" htmlFor="entity-address">Địa chỉ</label>
+            <input id="entity-address" value={entityAddress} maxLength={500} placeholder="Địa chỉ ghi trên sổ kế toán" onChange={(event) => setEntityAddress(event.target.value)} />
+          </div>
 
           <div className="settings-card form-section">
             <label className="field-label" htmlFor="entity-type">1. Loại hình đơn vị</label>
