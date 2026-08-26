@@ -12,6 +12,9 @@ export const TransactionType = {
   CAPITAL_CONTRIBUTION: 'CAPITAL_CONTRIBUTION',
   CUSTOMER_REFUND: 'CUSTOMER_REFUND',
   SUPPLIER_REFUND: 'SUPPLIER_REFUND',
+  TAX_PAYMENT: 'TAX_PAYMENT',
+  TAX_REFUND: 'TAX_REFUND',
+  TAX_ASSESSMENT: 'TAX_ASSESSMENT',
   REVERSAL: 'REVERSAL',
 
   // Legacy values remain readable so existing IndexedDB records are preserved.
@@ -28,6 +31,13 @@ export const AccountKind = {
   DEMAND_DEPOSIT: 'DEMAND_DEPOSIT',
 } as const;
 export type AccountKind = typeof AccountKind[keyof typeof AccountKind];
+
+export const TaxType = {
+  VAT: 'VAT',
+  INCOME_TAX: 'INCOME_TAX',
+} as const;
+export type TaxType = typeof TaxType[keyof typeof TaxType];
+export const TaxTypeSchema = z.nativeEnum(TaxType);
 
 export const Tt58ExpenseCategory = {
   MATERIALS_GOODS_ENERGY: 'MATERIALS_GOODS_ENERGY',
@@ -82,6 +92,14 @@ export const TransactionSchema = z.object({
   incomeTaxRevenueRate: z.number().finite().min(0).max(100).optional(),
   vatDeductible: z.boolean().optional(),
   tt58ExpenseCategory: z.nativeEnum(Tt58ExpenseCategory).optional(),
+
+  // Tax settlement events are explicit semantic transactions. TAX_ASSESSMENT is
+  // used only for TNDN under TAXABLE_INCOME and must identify the exact reporting
+  // period it assesses. TAX_PAYMENT affects cash and the selected tax obligation.
+  // TAX_REFUND is currently VAT-only and affects both cash and the VAT position.
+  taxType: TaxTypeSchema.optional(),
+  taxPeriodStart: z.number().optional(),
+  taxPeriodEnd: z.number().optional(),
 
   status: z.enum(['DRAFT', 'POSTED', 'REVERSED']).default('POSTED'),
   createdAt: z.number(),
