@@ -7,6 +7,7 @@ export function PwaStatus() {
   const updateRef = useRef<((reloadPage?: boolean) => Promise<void>) | null>(null);
 
   useEffect(() => {
+    let timer: number | undefined;
     updateRef.current = registerSW({
       immediate: true,
       onOfflineReady() {
@@ -17,12 +18,14 @@ export function PwaStatus() {
       },
       onRegisteredSW(_swUrl, registration) {
         if (!registration) return;
-        const timer = window.setInterval(() => {
+        timer = window.setInterval(() => {
           void registration.update().catch(() => undefined);
         }, 60 * 60 * 1000);
-        return () => window.clearInterval(timer);
       },
     });
+    return () => {
+      if (timer !== undefined) window.clearInterval(timer);
+    };
   }, []);
 
   if (!offlineReady && !needRefresh) return null;
@@ -52,7 +55,7 @@ export function PwaStatus() {
           type="button"
           onClick={() => {
             setOfflineReady(false);
-            if (!needRefresh) setNeedRefresh(false);
+            setNeedRefresh(false);
           }}
         >
           Đóng
