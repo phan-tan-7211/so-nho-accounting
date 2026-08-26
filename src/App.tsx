@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { AccountingSettings } from './AccountingSettings'
 import './App.css'
 
 type NavKey = 'overview' | 'transactions' | 'books' | 'settings'
@@ -49,7 +50,9 @@ function App() {
           <p className="eyebrow">Sổ nhỏ</p>
           <h1>{title}</h1>
         </div>
-        <button className="period-chip" type="button" aria-label="Chọn kỳ báo cáo">Tháng này</button>
+        {activeNav !== 'settings' ? (
+          <button className="period-chip" type="button" aria-label="Chọn kỳ báo cáo">Tháng này</button>
+        ) : null}
       </header>
 
       <main className="main-content" id="main-content">
@@ -101,6 +104,8 @@ function App() {
               </div>
             </section>
           </>
+        ) : activeNav === 'settings' ? (
+          <AccountingSettings />
         ) : (
           <section className="placeholder-card">
             <p className="eyebrow">Đang xây dựng</p>
