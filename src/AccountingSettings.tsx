@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { AccountManager } from './AccountManager';
 import { DataSafetyPanel } from './DataSafetyPanel';
 import { PartnerManager } from './PartnerManager';
+import { ReleaseTools } from './ReleaseTools';
 import { db } from './db';
 import {
   ACCOUNTING_REGIME_INFO,
@@ -266,6 +267,7 @@ export function AccountingSettings() {
 
       <AccountManager />
       <PartnerManager />
+      <ReleaseTools />
       <DataSafetyPanel />
 
       <div className="settings-note">

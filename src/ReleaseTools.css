@@ -1,0 +1,70 @@
+.release-tools {
+  display: grid;
+  gap: 14px;
+}
+
+.release-runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.release-runtime-grid > div {
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-bg);
+}
+
+.release-runtime-grid span,
+.release-runtime-grid strong,
+.release-relock-row small {
+  display: block;
+}
+
+.release-runtime-grid span,
+.release-relock-row small {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.release-runtime-grid strong {
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.release-relock-block {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.release-relock-list {
+  display: grid;
+  gap: 8px;
+}
+
+.release-relock-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.release-relock-row small {
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+@media (max-width: 560px) {
+  .release-runtime-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .release-relock-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

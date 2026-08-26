@@ -1,6 +1,7 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { TransactionType } from './models';
 import type { TransactionType as TransactionTypeValue } from './models';
+import { PwaStatus } from './PwaStatus';
 import './App.css';
 import './Workspace.css';
 
@@ -63,6 +64,7 @@ function App() {
 
   return (
     <div className="app-shell">
+      <PwaStatus />
       <header className="topbar">
         <div>
           <p className="eyebrow">Sổ nhỏ · TT58</p>

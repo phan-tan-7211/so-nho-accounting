@@ -343,7 +343,7 @@ export function BooksWorkspace() {
           {activeExportReport ? <button className="secondary-button" type="button" onClick={() => exportXlsx(activeExportReport)}>Xuất XLSX TT58 {periodLock?.status === 'LOCKED' ? 'từ snapshot khóa' : 'nháp'}</button> : null}
         </div>
         {periodLock?.status === 'LOCKED' && activeExportReport?.tables.some((table) => table.code === 'S2c-DNSN') ? (
-          <p className="lock-copy">Lưu ý: XLSX locked có S2c sẽ bị chặn ở Phase 13 vì TT58 yêu cầu đơn giá xuất kho bình quân kỳ; inventory V1 hiện vẫn dùng đơn giá movement explicit. CSV/snapshot không bị thay đổi.</p>
+          <p className="lock-copy">S2c locked XLSX được phép khi snapshot ghi nhận TT58_PERIOD_AVERAGE_V1. Snapshot S2c legacy vẫn fail-closed và phải relock tuần tự trước khi phát hành file chính thức.</p>
         ) : null}
         {activeExportReport ? <div className="report-file-list">{activeExportReport.tables.map((table) => (
           <button className="report-file-button" type="button" key={table.code} onClick={() => exportCsv(table)}><strong>{table.code}.csv</strong><span>{table.title}</span></button>
