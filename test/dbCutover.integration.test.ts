@@ -57,7 +57,7 @@ afterEach(async () => {
 const describeIndexedDb = process.env.CI === 'true' ? describe : describe.skip;
 
 describeIndexedDb('Dexie accounting cutover integration', () => {
-  it('upgrades V2 to V6 additively, preserves records, persists cutover, and reopens idempotently', async () => {
+  it('upgrades V2 to V7 additively, preserves records, persists cutover, and reopens idempotently', async () => {
     const name = nextDatabaseName();
     const legacy = new LegacyV2DB(name);
     const originalAccount = account(1_200);
@@ -80,7 +80,7 @@ describeIndexedDb('Dexie accounting cutover integration', () => {
     const upgraded = new AccountingDB(name);
     await upgraded.open();
 
-    expect(upgraded.verno).toBe(6);
+    expect(upgraded.verno).toBe(7);
     expect(await upgraded.accounts.get(CASH_ID)).toEqual(originalAccount);
     expect(await upgraded.transactions.get(TX_ID)).toEqual(originalTransaction);
     expect(await upgraded.auditLogs.get(AUDIT_ID)).toEqual(audit);
@@ -91,6 +91,7 @@ describeIndexedDb('Dexie accounting cutover integration', () => {
     expect(await upgraded.inventoryItems.count()).toBe(0);
     expect(await upgraded.inventoryOpenings.count()).toBe(0);
     expect(await upgraded.inventoryMovements.count()).toBe(0);
+    expect(await upgraded.partners.count()).toBe(0);
 
     const first = await runAccountingCutover(new DexieAccountingCutoverStore(upgraded));
     expect(first.status).toBe('APPLIED');
@@ -113,6 +114,7 @@ describeIndexedDb('Dexie accounting cutover integration', () => {
     expect(await reopened.inventoryItems.count()).toBe(0);
     expect(await reopened.inventoryOpenings.count()).toBe(0);
     expect(await reopened.inventoryMovements.count()).toBe(0);
+    expect(await reopened.partners.count()).toBe(0);
     reopened.close();
   });
 
@@ -166,6 +168,7 @@ describeIndexedDb('Dexie accounting cutover integration', () => {
     expect(await upgraded.migrationStates.count()).toBe(1);
     expect(await upgraded.taxOpeningPositions.count()).toBe(0);
     expect(await upgraded.inventoryItems.count()).toBe(0);
+    expect(await upgraded.partners.count()).toBe(0);
     upgraded.close();
   });
 });
