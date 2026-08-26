@@ -31,11 +31,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install IndexedDB test harness
+        run: npm install --no-save --package-lock=false --ignore-scripts fake-indexeddb@6.2.5
+
       - name: Test
         run: npm test
 
       - name: Build
-        run: npm run build -- --base=/so-nho-accounting/
+        env:
+          VITE_BASE_PATH: /so-nho-accounting/
+        run: npm run build
 
       - name: Lint
         run: npm run lint
