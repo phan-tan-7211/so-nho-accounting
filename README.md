@@ -2,7 +2,7 @@
 
 Local-first accounting PWA for **Thông tư 58/2026/TT-BTC** V1.
 
-Current release candidate: **1.0.0-rc.1**.
+Current release candidate: **1.0.0-rc.2**.
 
 ## Scope
 
@@ -43,6 +43,18 @@ Before clearing site/browser data, moving devices, resetting a browser profile o
 Production builds generate a web app manifest and Service Worker. After one successful online load, the app shell can be available offline. A newer Service Worker is surfaced through an explicit update prompt; the app does not automatically reload over active accounting work.
 
 Offline availability does not change the storage boundary: IndexedDB remains device/browser-local.
+
+The Phase 16 production baseline (`1.0.0-rc.1`) was verified with a live root load, valid manifest, a real Workbox service worker, precached app shell, root navigation fallback and a successful offline reload. `rc.2` is the stabilization candidate built on that production baseline and must pass its own release checklist before promotion.
+
+## Release 1.0 stabilization
+
+`1.0.0-rc.2` focuses on release safety rather than new accounting domains:
+
+- stricter calendar and percentage input parsing;
+- user-facing Vietnamese validation copy;
+- fatal-render recovery that preserves the local-data safety message instead of showing a blank screen;
+- mobile touch/focus hardening and long-list rendering containment;
+- keyboard/focus behavior for the quick transaction sheet.
 
 ## Development
 
