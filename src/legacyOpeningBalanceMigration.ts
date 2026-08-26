@@ -224,7 +224,12 @@ function reproduceLegacyTransactionCashDelta(
         issues,
       );
 
-      if (hasSource && hasDestination) {
+      if (
+        hasSource &&
+        hasDestination &&
+        tx.sourceAccountId !== undefined &&
+        tx.destinationAccountId !== undefined
+      ) {
         // The legacy engine allowed same-account transfer and applied -X then +X.
         // Reproducing both operations preserves its exact net-zero behavior.
         addDelta(deltas, tx.sourceAccountId, -tx.amount, issues, tx.id);
