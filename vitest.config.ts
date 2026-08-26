@@ -2,6 +2,6 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    setupFiles: ['./src/test/setupIndexedDb.ts'],
+    setupFiles: ['./test/setupIndexedDb.ts'],
   },
 });
