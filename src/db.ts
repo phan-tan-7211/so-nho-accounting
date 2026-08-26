@@ -10,6 +10,12 @@ import type { TaxOpeningPosition } from './taxOpeningPosition';
 import type { PeriodLockEvent, PeriodLockRecord } from './periodLock';
 import type { InventoryItem, InventoryMovement, InventoryOpening } from './inventory';
 import type { Partner } from './partners';
+import type {
+  FixedAsset,
+  OtherTaxEntry,
+  SupplementaryDebtEntry,
+  SupplementaryEquityEntry,
+} from './tt58Supplementary';
 
 export class AccountingDB extends Dexie {
   accounts!: Table<Account, string>;
@@ -25,6 +31,10 @@ export class AccountingDB extends Dexie {
   inventoryOpenings!: Table<InventoryOpening, string>;
   inventoryMovements!: Table<InventoryMovement, string>;
   partners!: Table<Partner, string>;
+  supplementaryDebtEntries!: Table<SupplementaryDebtEntry, string>;
+  fixedAssets!: Table<FixedAsset, string>;
+  otherTaxEntries!: Table<OtherTaxEntry, string>;
+  supplementaryEquityEntries!: Table<SupplementaryEquityEntry, string>;
 
   constructor(name = 'AccountingDB') {
     super(name);
@@ -88,10 +98,6 @@ export class AccountingDB extends Dexie {
       inventoryMovements: 'id, itemId, date, direction, transactionId, reversalOfMovementId, status',
     });
 
-    // V7 is additive and replaces free-form partner UUID entry with a durable
-    // customer/supplier master. Existing transactions remain untouched; their
-    // partnerId values are validated at runtime/report diagnostics instead of
-    // being silently rewritten during schema upgrade.
     this.version(7).stores({
       accounts: 'id, name',
       transactions: 'id, date, type, sourceAccountId, destinationAccountId, status',
@@ -106,6 +112,28 @@ export class AccountingDB extends Dexie {
       inventoryOpenings: 'id, &itemId, effectiveDate',
       inventoryMovements: 'id, itemId, date, direction, transactionId, reversalOfMovementId, status',
       partners: 'id, &code, name, kind, active',
+    });
+
+    // V8 adds explicit data sources for the optional TT58 Article 9 detailed books.
+    // Existing V7 data remains untouched and the new stores start empty.
+    this.version(8).stores({
+      accounts: 'id, name',
+      transactions: 'id, date, type, sourceAccountId, destinationAccountId, status',
+      auditLogs: 'id, transactionId, timestamp',
+      accountingProfiles: 'id, regime, entityType, dataStartDate',
+      openingEffects: 'id, migrationId, migrationVersion, accountId, kind',
+      migrationStates: 'id, version',
+      taxOpeningPositions: 'id, taxType, periodStart',
+      periodLocks: 'id, status, periodStart, periodEnd, revision',
+      periodLockEvents: 'id, periodLockId, action, revision, timestamp',
+      inventoryItems: 'id, &code, name',
+      inventoryOpenings: 'id, &itemId, effectiveDate',
+      inventoryMovements: 'id, itemId, date, direction, transactionId, reversalOfMovementId, status',
+      partners: 'id, &code, name, kind, active',
+      supplementaryDebtEntries: 'id, subjectCode, subjectKind, date, reversalOfEntryId',
+      fixedAssets: 'id, &code, category, increaseDate, decreaseDate',
+      otherTaxEntries: 'id, taxCode, date',
+      supplementaryEquityEntries: 'id, accountCode, category, date, reversalOfEntryId',
     });
   }
 }
