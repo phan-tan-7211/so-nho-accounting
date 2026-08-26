@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { TransactionType } from './models';
 import type { TransactionType as TransactionTypeValue } from './models';
 import { PwaStatus } from './PwaStatus';
@@ -47,6 +47,7 @@ function App() {
   const [quickOpen, setQuickOpen] = useState(false);
   const [requestedType, setRequestedType] = useState<TransactionTypeValue | undefined>();
   const [requestToken, setRequestToken] = useState(0);
+  const firstQuickActionRef = useRef<HTMLButtonElement | null>(null);
 
   const title = useMemo(() => ({
     overview: 'Tổng quan',
@@ -54,6 +55,19 @@ function App() {
     books: 'Sổ sách',
     settings: 'Cài đặt',
   }[activeNav]), [activeNav]);
+
+  useEffect(() => {
+    if (!quickOpen) return;
+    const focusTimer = window.setTimeout(() => firstQuickActionRef.current?.focus(), 0);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setQuickOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.clearTimeout(focusTimer);
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [quickOpen]);
 
   function openTransaction(type: TransactionTypeValue) {
     setRequestedType(type);
@@ -91,13 +105,13 @@ function App() {
       </main>
 
       {quickOpen ? (
-        <div className="quick-sheet" role="dialog" aria-modal="true" aria-labelledby="quick-sheet-title">
+        <div id="quick-transaction-sheet" className="quick-sheet" role="dialog" aria-modal="true" aria-labelledby="quick-sheet-title">
           <button className="quick-sheet__scrim" type="button" aria-label="Đóng menu thao tác" onClick={() => setQuickOpen(false)}></button>
           <div className="quick-sheet__panel">
             <div className="quick-sheet__handle" aria-hidden="true"></div>
             <h2 id="quick-sheet-title">Thêm giao dịch</h2>
             <div className="quick-sheet__actions">
-              <button type="button" onClick={() => openTransaction(TransactionType.CASH_SALE)}><span className="quick-action__icon positive"><Icon name="income" /></span><span><strong>Bán thu tiền</strong><small>CASH_SALE</small></span><Icon name="chevron" size={18}/></button>
+              <button ref={firstQuickActionRef} type="button" onClick={() => openTransaction(TransactionType.CASH_SALE)}><span className="quick-action__icon positive"><Icon name="income" /></span><span><strong>Bán thu tiền</strong><small>CASH_SALE</small></span><Icon name="chevron" size={18}/></button>
               <button type="button" onClick={() => openTransaction(TransactionType.CASH_PURCHASE)}><span className="quick-action__icon negative"><Icon name="expense" /></span><span><strong>Mua / chi</strong><small>CASH_PURCHASE</small></span><Icon name="chevron" size={18}/></button>
               <button type="button" onClick={() => openTransaction(TransactionType.TRANSFER)}><span className="quick-action__icon primary"><Icon name="transfer" /></span><span><strong>Chuyển tiền</strong><small>Giữa các tài khoản</small></span><Icon name="chevron" size={18}/></button>
               <button type="button" onClick={() => openTransaction(TransactionType.TAX_PAYMENT)}><span className="quick-action__icon negative"><Icon name="expense" /></span><span><strong>Nộp thuế</strong><small>VAT / thuế thu nhập</small></span><Icon name="chevron" size={18}/></button>
@@ -107,11 +121,11 @@ function App() {
       ) : null}
 
       <nav className="bottom-nav" aria-label="Điều hướng chính">
-        <button type="button" className={activeNav === 'overview' ? 'active' : ''} onClick={() => setActiveNav('overview')}><Icon name="home"/><span>Tổng quan</span></button>
-        <button type="button" className={activeNav === 'transactions' ? 'active' : ''} onClick={() => setActiveNav('transactions')}><Icon name="transactions"/><span>Giao dịch</span></button>
-        <button type="button" className="fab" aria-label="Thêm giao dịch" onClick={() => setQuickOpen(true)}><Icon name="plus" size={28}/></button>
-        <button type="button" className={activeNav === 'books' ? 'active' : ''} onClick={() => setActiveNav('books')}><Icon name="books"/><span>Sổ sách</span></button>
-        <button type="button" className={activeNav === 'settings' ? 'active' : ''} onClick={() => setActiveNav('settings')}><Icon name="settings"/><span>Cài đặt</span></button>
+        <button type="button" className={activeNav === 'overview' ? 'active' : ''} aria-current={activeNav === 'overview' ? 'page' : undefined} onClick={() => setActiveNav('overview')}><Icon name="home"/><span>Tổng quan</span></button>
+        <button type="button" className={activeNav === 'transactions' ? 'active' : ''} aria-current={activeNav === 'transactions' ? 'page' : undefined} onClick={() => setActiveNav('transactions')}><Icon name="transactions"/><span>Giao dịch</span></button>
+        <button type="button" className="fab" aria-label="Thêm giao dịch" aria-expanded={quickOpen} aria-controls="quick-transaction-sheet" onClick={() => setQuickOpen(true)}><Icon name="plus" size={28}/></button>
+        <button type="button" className={activeNav === 'books' ? 'active' : ''} aria-current={activeNav === 'books' ? 'page' : undefined} onClick={() => setActiveNav('books')}><Icon name="books"/><span>Sổ sách</span></button>
+        <button type="button" className={activeNav === 'settings' ? 'active' : ''} aria-current={activeNav === 'settings' ? 'page' : undefined} onClick={() => setActiveNav('settings')}><Icon name="settings"/><span>Cài đặt</span></button>
       </nav>
     </div>
   );

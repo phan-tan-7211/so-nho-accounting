@@ -4,6 +4,7 @@ import { TaxType, TransactionType } from './models';
 import {
   createEmptyTransactionDraft,
   createPostedTransactionInput,
+  dateInputToTimestamp,
   getTransactionFormRequirements,
   monthInputToPeriod,
 } from './uiAccounting';
@@ -32,6 +33,12 @@ describe('TT58 UI accounting helpers', () => {
     expect([start.getFullYear(), start.getMonth(), start.getDate(), start.getHours()]).toEqual([2026, 7, 1, 0]);
     expect([end.getFullYear(), end.getMonth(), end.getDate()]).toEqual([2026, 7, 31]);
     expect(end.getTime() + 1).toBe(new Date(2026, 8, 1, 0, 0, 0, 0).getTime());
+  });
+
+  it('rejects calendar dates that JavaScript would otherwise normalize silently', () => {
+    expect(() => dateInputToTimestamp('2026-02-29')).toThrow('không tồn tại trên lịch');
+    expect(() => dateInputToTimestamp('2026-04-31')).toThrow('không tồn tại trên lịch');
+    expect(new Date(dateInputToTimestamp('2028-02-29')).getDate()).toBe(29);
   });
 
   it('exposes exact relationship requirements per semantic type', () => {
@@ -83,10 +90,28 @@ describe('TT58 UI accounting helpers', () => {
     });
   });
 
-  it('requires partner for credit activity', () => {
+  it('accepts Vietnamese decimal comma for percentage fields and rejects exponent notation', () => {
+    const draft = createEmptyTransactionDraft();
+    Object.assign(draft, {
+      type: TransactionType.CASH_SALE,
+      amount: '1100',
+      destinationAccountId: CASH_ID,
+      vatRate: '8,5',
+      vatRevenueRate: '3,25',
+    });
+    expect(createPostedTransactionInput(draft, deductionProfile)).toMatchObject({
+      vatRate: 8.5,
+      vatRevenueRate: 3.25,
+    });
+
+    draft.vatRate = '1e2';
+    expect(() => createPostedTransactionInput(draft, deductionProfile)).toThrow('dấu phẩy hoặc dấu chấm');
+  });
+
+  it('requires a customer or supplier for credit activity using user-facing terminology', () => {
     const draft = createEmptyTransactionDraft();
     Object.assign(draft, { type: TransactionType.CREDIT_SALE, amount: '1000' });
-    expect(() => createPostedTransactionInput(draft, deductionProfile)).toThrow('Partner ID');
+    expect(() => createPostedTransactionInput(draft, deductionProfile)).toThrow('khách hàng / nhà cung cấp');
 
     draft.partnerId = PARTNER_ID;
     expect(createPostedTransactionInput(draft, deductionProfile).partnerId).toBe(PARTNER_ID);

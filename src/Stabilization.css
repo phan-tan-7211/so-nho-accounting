@@ -1,0 +1,89 @@
+/* Release-candidate stabilization rules kept separate from the visual design system. */
+
+input,
+select,
+textarea,
+button {
+  min-height: 44px;
+}
+
+input,
+select,
+textarea {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.transaction-row--static,
+.inventory-movement-row,
+.account-row {
+  content-visibility: auto;
+  contain-intrinsic-size: 72px;
+}
+
+.form-alert,
+.empty-copy,
+.transaction-copy,
+.inventory-item-row,
+.inventory-movement-row {
+  overflow-wrap: anywhere;
+}
+
+.fatal-error-shell {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  box-sizing: border-box;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.fatal-error-card {
+  width: min(100%, 520px);
+  padding: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-2);
+}
+
+.fatal-error-card h1 {
+  margin: 6px 0 12px;
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.fatal-error-card p:not(.eyebrow) {
+  margin: 0 0 20px;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+@media (max-width: 599px) {
+  input,
+  select,
+  textarea {
+    /* Prevent Safari/iOS from zooming the viewport when a field receives focus. */
+    font-size: 16px;
+  }
+
+  .transaction-row--static {
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+  }
+
+  .transaction-row--static > .text-danger-button,
+  .transaction-row--static > span:last-child {
+    grid-column: 2 / -1;
+    justify-self: end;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fatal-error-card,
+  .transaction-row--static,
+  .inventory-movement-row,
+  .account-row {
+    scroll-behavior: auto;
+  }
+}
