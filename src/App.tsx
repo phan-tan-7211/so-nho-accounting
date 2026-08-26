@@ -6,6 +6,7 @@ import { TransactionWorkspace } from './TransactionWorkspace';
 import { TransactionType } from './models';
 import type { TransactionType as TransactionTypeValue } from './models';
 import './App.css';
+import './Workspace.css';
 
 type NavKey = 'overview' | 'transactions' | 'books' | 'settings';
 
