@@ -7,8 +7,12 @@ import { TaxOpeningPositionSchema } from './taxOpeningPosition';
 import { InventoryItemSchema, InventoryMovementSchema, InventoryOpeningSchema } from './inventory';
 import { PartnerSchema } from './partners';
 import {
-  LEGACY_OPENING_BALANCE_MIGRATION_ID,
-} from './accountingCutoverPersistence';
+  FixedAssetSchema,
+  OtherTaxEntrySchema,
+  SupplementaryDebtEntrySchema,
+  SupplementaryEquityEntrySchema,
+} from './tt58Supplementary';
+import { LEGACY_OPENING_BALANCE_MIGRATION_ID } from './accountingCutoverPersistence';
 import {
   LEGACY_OPENING_BALANCE_MIGRATION_VERSION,
   OpeningEffectKind,
@@ -16,7 +20,8 @@ import {
 
 export const BACKUP_FORMAT = 'SO_NHO_ACCOUNTING_BACKUP' as const;
 export const BACKUP_FORMAT_VERSION = 1 as const;
-export const CURRENT_DATABASE_VERSION = 7 as const;
+export const CURRENT_DATABASE_VERSION = 8 as const;
+export type SupportedBackupDatabaseVersion = 7 | typeof CURRENT_DATABASE_VERSION;
 
 const OpeningCashEffectSchema = z.object({
   kind: z.literal(OpeningEffectKind.OPENING_CASH),
@@ -71,6 +76,10 @@ export interface BackupData {
   inventoryOpenings: unknown[];
   inventoryMovements: unknown[];
   partners: unknown[];
+  supplementaryDebtEntries: unknown[];
+  fixedAssets: unknown[];
+  otherTaxEntries: unknown[];
+  supplementaryEquityEntries: unknown[];
 }
 
 export type BackupTableName = keyof BackupData;
@@ -78,7 +87,7 @@ export type BackupTableName = keyof BackupData;
 export interface BackupEnvelope {
   format: typeof BACKUP_FORMAT;
   formatVersion: typeof BACKUP_FORMAT_VERSION;
-  databaseVersion: typeof CURRENT_DATABASE_VERSION;
+  databaseVersion: SupportedBackupDatabaseVersion;
   createdAt: number;
   data: BackupData;
   checksumSha256: string;
@@ -86,7 +95,7 @@ export interface BackupEnvelope {
 
 export interface BackupPreview {
   formatVersion: typeof BACKUP_FORMAT_VERSION;
-  databaseVersion: typeof CURRENT_DATABASE_VERSION;
+  databaseVersion: SupportedBackupDatabaseVersion;
   createdAt: number;
   checksumSha256: string;
   counts: Record<BackupTableName, number>;
@@ -108,6 +117,17 @@ interface ParsedBackupData {
   inventoryOpenings: z.infer<typeof InventoryOpeningSchema>[];
   inventoryMovements: z.infer<typeof InventoryMovementSchema>[];
   partners: z.infer<typeof PartnerSchema>[];
+  supplementaryDebtEntries: z.infer<typeof SupplementaryDebtEntrySchema>[];
+  fixedAssets: z.infer<typeof FixedAssetSchema>[];
+  otherTaxEntries: z.infer<typeof OtherTaxEntrySchema>[];
+  supplementaryEquityEntries: z.infer<typeof SupplementaryEquityEntrySchema>[];
+}
+
+interface RawBackupData extends Omit<BackupData, 'supplementaryDebtEntries' | 'fixedAssets' | 'otherTaxEntries' | 'supplementaryEquityEntries'> {
+  supplementaryDebtEntries?: unknown[];
+  fixedAssets?: unknown[];
+  otherTaxEntries?: unknown[];
+  supplementaryEquityEntries?: unknown[];
 }
 
 function sortJson(value: unknown): unknown {
@@ -121,7 +141,7 @@ function sortJson(value: unknown): unknown {
   return value;
 }
 
-export function canonicalBackupPayload(value: Omit<BackupEnvelope, 'checksumSha256'>): string {
+export function canonicalBackupPayload(value: unknown): string {
   return JSON.stringify(sortJson(value));
 }
 
@@ -134,6 +154,16 @@ function parseArray<T>(value: unknown, schema: z.ZodType<T>, label: string): T[]
   const result = z.array(schema).safeParse(value);
   if (!result.success) throw new Error(`Backup table ${label} is invalid`);
   return result.data;
+}
+
+function normalizeBackupData(data: RawBackupData): BackupData {
+  return {
+    ...data,
+    supplementaryDebtEntries: data.supplementaryDebtEntries ?? [],
+    fixedAssets: data.fixedAssets ?? [],
+    otherTaxEntries: data.otherTaxEntries ?? [],
+    supplementaryEquityEntries: data.supplementaryEquityEntries ?? [],
+  };
 }
 
 function parseBackupData(data: BackupData): ParsedBackupData {
@@ -151,30 +181,49 @@ function parseBackupData(data: BackupData): ParsedBackupData {
     inventoryOpenings: parseArray(data.inventoryOpenings, InventoryOpeningSchema, 'inventoryOpenings'),
     inventoryMovements: parseArray(data.inventoryMovements, InventoryMovementSchema, 'inventoryMovements'),
     partners: parseArray(data.partners, PartnerSchema, 'partners'),
+    supplementaryDebtEntries: parseArray(data.supplementaryDebtEntries, SupplementaryDebtEntrySchema, 'supplementaryDebtEntries'),
+    fixedAssets: parseArray(data.fixedAssets, FixedAssetSchema, 'fixedAssets'),
+    otherTaxEntries: parseArray(data.otherTaxEntries, OtherTaxEntrySchema, 'otherTaxEntries'),
+    supplementaryEquityEntries: parseArray(data.supplementaryEquityEntries, SupplementaryEquityEntrySchema, 'supplementaryEquityEntries'),
   };
 }
+
+const RawBackupDataSchema = z.object({
+  accounts: z.array(z.unknown()),
+  transactions: z.array(z.unknown()),
+  auditLogs: z.array(z.unknown()),
+  accountingProfiles: z.array(z.unknown()),
+  openingEffects: z.array(z.unknown()),
+  migrationStates: z.array(z.unknown()),
+  taxOpeningPositions: z.array(z.unknown()),
+  periodLocks: z.array(z.unknown()),
+  periodLockEvents: z.array(z.unknown()),
+  inventoryItems: z.array(z.unknown()),
+  inventoryOpenings: z.array(z.unknown()),
+  inventoryMovements: z.array(z.unknown()),
+  partners: z.array(z.unknown()),
+  supplementaryDebtEntries: z.array(z.unknown()).optional(),
+  fixedAssets: z.array(z.unknown()).optional(),
+  otherTaxEntries: z.array(z.unknown()).optional(),
+  supplementaryEquityEntries: z.array(z.unknown()).optional(),
+});
 
 const BackupEnvelopeInputSchema = z.object({
   format: z.literal(BACKUP_FORMAT),
   formatVersion: z.literal(BACKUP_FORMAT_VERSION),
-  databaseVersion: z.literal(CURRENT_DATABASE_VERSION),
+  databaseVersion: z.union([z.literal(7), z.literal(CURRENT_DATABASE_VERSION)]),
   createdAt: z.number().int().nonnegative(),
-  data: z.object({
-    accounts: z.array(z.unknown()),
-    transactions: z.array(z.unknown()),
-    auditLogs: z.array(z.unknown()),
-    accountingProfiles: z.array(z.unknown()),
-    openingEffects: z.array(z.unknown()),
-    migrationStates: z.array(z.unknown()),
-    taxOpeningPositions: z.array(z.unknown()),
-    periodLocks: z.array(z.unknown()),
-    periodLockEvents: z.array(z.unknown()),
-    inventoryItems: z.array(z.unknown()),
-    inventoryOpenings: z.array(z.unknown()),
-    inventoryMovements: z.array(z.unknown()),
-    partners: z.array(z.unknown()),
-  }),
+  data: RawBackupDataSchema,
   checksumSha256: z.string().regex(/^[a-f0-9]{64}$/),
+}).superRefine((envelope, context) => {
+  if (envelope.databaseVersion !== CURRENT_DATABASE_VERSION) return;
+  const missing = [
+    ['supplementaryDebtEntries', envelope.data.supplementaryDebtEntries],
+    ['fixedAssets', envelope.data.fixedAssets],
+    ['otherTaxEntries', envelope.data.otherTaxEntries],
+    ['supplementaryEquityEntries', envelope.data.supplementaryEquityEntries],
+  ].filter(([, value]) => value === undefined).map(([name]) => name);
+  if (missing.length > 0) context.addIssue({ code: 'custom', message: `V8 backup is missing tables: ${missing.join(', ')}` });
 });
 
 function buildPreview(envelope: BackupEnvelope, parsed: ParsedBackupData): BackupPreview {
@@ -192,6 +241,10 @@ function buildPreview(envelope: BackupEnvelope, parsed: ParsedBackupData): Backu
     inventoryOpenings: parsed.inventoryOpenings.length,
     inventoryMovements: parsed.inventoryMovements.length,
     partners: parsed.partners.length,
+    supplementaryDebtEntries: parsed.supplementaryDebtEntries.length,
+    fixedAssets: parsed.fixedAssets.length,
+    otherTaxEntries: parsed.otherTaxEntries.length,
+    supplementaryEquityEntries: parsed.supplementaryEquityEntries.length,
   };
   return {
     formatVersion: envelope.formatVersion,
@@ -205,11 +258,7 @@ function buildPreview(envelope: BackupEnvelope, parsed: ParsedBackupData): Backu
 }
 
 export class DataBackupService {
-  private readonly database: AccountingDB;
-
-  constructor(database: AccountingDB) {
-    this.database = database;
-  }
+  constructor(private readonly database: AccountingDB) {}
 
   private tables() {
     return [
@@ -226,6 +275,10 @@ export class DataBackupService {
       this.database.inventoryOpenings,
       this.database.inventoryMovements,
       this.database.partners,
+      this.database.supplementaryDebtEntries,
+      this.database.fixedAssets,
+      this.database.otherTaxEntries,
+      this.database.supplementaryEquityEntries,
     ] as const;
   }
 
@@ -244,6 +297,10 @@ export class DataBackupService {
       inventoryOpenings: await this.database.inventoryOpenings.toArray(),
       inventoryMovements: await this.database.inventoryMovements.toArray(),
       partners: await this.database.partners.toArray(),
+      supplementaryDebtEntries: await this.database.supplementaryDebtEntries.toArray(),
+      fixedAssets: await this.database.fixedAssets.toArray(),
+      otherTaxEntries: await this.database.otherTaxEntries.toArray(),
+      supplementaryEquityEntries: await this.database.supplementaryEquityEntries.toArray(),
     }));
     const unsigned = {
       format: BACKUP_FORMAT,
@@ -261,18 +318,24 @@ export class DataBackupService {
 
   async verifyJson(json: string): Promise<{ envelope: BackupEnvelope; parsed: ParsedBackupData }> {
     let raw: unknown;
-    try {
-      raw = JSON.parse(json);
-    } catch {
-      throw new Error('Backup JSON is malformed');
-    }
+    try { raw = JSON.parse(json); } catch { throw new Error('Backup JSON is malformed'); }
     const result = BackupEnvelopeInputSchema.safeParse(raw);
     if (!result.success) throw new Error('Backup envelope/version is unsupported or invalid');
-    const envelope = result.data as BackupEnvelope;
-    const { checksumSha256: _checksum, ...unsigned } = envelope;
-    const actual = await sha256Hex(canonicalBackupPayload(unsigned));
-    if (actual !== envelope.checksumSha256) throw new Error('Backup checksum does not match; file may be corrupted or modified');
-    return { envelope, parsed: parseBackupData(envelope.data) };
+
+    const { checksumSha256, ...unsignedRaw } = result.data;
+    const actual = await sha256Hex(canonicalBackupPayload(unsignedRaw));
+    if (actual !== checksumSha256) throw new Error('Backup checksum does not match; file may be corrupted or modified');
+
+    const normalizedData = normalizeBackupData(result.data.data);
+    const envelope: BackupEnvelope = {
+      format: result.data.format,
+      formatVersion: result.data.formatVersion,
+      databaseVersion: result.data.databaseVersion,
+      createdAt: result.data.createdAt,
+      data: normalizedData,
+      checksumSha256,
+    };
+    return { envelope, parsed: parseBackupData(normalizedData) };
   }
 
   async previewJson(json: string): Promise<BackupPreview> {
@@ -297,6 +360,10 @@ export class DataBackupService {
       await this.database.inventoryOpenings.bulkPut(parsed.inventoryOpenings);
       await this.database.inventoryMovements.bulkPut(parsed.inventoryMovements);
       await this.database.partners.bulkPut(parsed.partners);
+      await this.database.supplementaryDebtEntries.bulkPut(parsed.supplementaryDebtEntries);
+      await this.database.fixedAssets.bulkPut(parsed.fixedAssets);
+      await this.database.otherTaxEntries.bulkPut(parsed.otherTaxEntries);
+      await this.database.supplementaryEquityEntries.bulkPut(parsed.supplementaryEquityEntries);
     });
     return envelope;
   }
