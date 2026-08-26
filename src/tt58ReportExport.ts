@@ -1,6 +1,10 @@
 import type { AccountingProfile } from './accountingProfile';
 import type { ProjectionPeriod } from './accountingProjections';
-import { formatInventoryQuantity } from './inventory';
+import {
+  TT58_INVENTORY_VALUATION_METHOD,
+  formatInventoryQuantity,
+  tt58PeriodAverageUnitCostVnd,
+} from './inventory';
 import type { Tt58RuntimeBookCapability } from './tt58CapabilityReadiness';
 import type { Tt58FinalMaterializedBooks } from './tt58TaxSettledBooks';
 
@@ -13,6 +17,16 @@ export interface Tt58ReportTable {
   rows: readonly (readonly ReportCell[])[];
 }
 
+export interface Tt58ReportInventoryValuation {
+  method: typeof TT58_INVENTORY_VALUATION_METHOD;
+  sections: readonly {
+    itemId: string;
+    itemCode: string;
+    closingQuantityMilli: number;
+    closingValueVnd: number;
+  }[];
+}
+
 export interface Tt58ReportBundle {
   schemaVersion: 1;
   regime: AccountingProfile['regime'];
@@ -23,6 +37,7 @@ export interface Tt58ReportBundle {
   incomeTaxMethod: AccountingProfile['incomeTaxMethod'];
   periodStart: number;
   periodEnd: number;
+  inventoryValuation?: Tt58ReportInventoryValuation;
   tables: readonly Tt58ReportTable[];
 }
 
@@ -105,16 +120,19 @@ function s2bTable(title: string, book: NonNullable<Tt58FinalMaterializedBooks['s
 function s2cTable(title: string, book: NonNullable<Tt58FinalMaterializedBooks['s2c']>): Tt58ReportTable {
   const rows: ReportCell[][] = [];
   for (const section of book.sections) {
+    const openingUnitCost = tt58PeriodAverageUnitCostVnd(section.openingQuantityMilli, section.openingValueVnd, 0, 0);
     rows.push([
       'OPENING', section.itemCode, section.itemName, section.unit, '', '', '',
       formatInventoryQuantity(section.openingQuantityMilli), '', section.openingValueVnd,
       formatInventoryQuantity(section.openingQuantityMilli), section.openingValueVnd,
+      openingUnitCost, '', '',
     ]);
     for (const row of section.rows) {
       rows.push([
         'ENTRY', section.itemCode, section.itemName, section.unit, dateCell(row.date),
         row.documentNumber ?? '', row.description ?? '', formatInventoryQuantity(row.quantityMilli),
         row.direction, row.valueVnd, formatInventoryQuantity(row.quantityBalanceMilli), row.valueBalanceVnd,
+        row.unitCostVnd, row.recordedUnitCostVnd, row.reversal ? 'REVERSAL' : '',
       ]);
     }
     rows.push([
@@ -122,6 +140,7 @@ function s2cTable(title: string, book: NonNullable<Tt58FinalMaterializedBooks['s
       `IN ${formatInventoryQuantity(section.inboundQuantityMilli)} / OUT ${formatInventoryQuantity(section.outboundQuantityMilli)}`,
       '', section.inboundValueVnd - section.outboundValueVnd,
       formatInventoryQuantity(section.closingQuantityMilli), section.closingValueVnd,
+      section.periodAverageUnitCostVnd, section.valuationAdjustmentVnd, section.valuationMethod,
     ]);
   }
   return {
@@ -130,6 +149,7 @@ function s2cTable(title: string, book: NonNullable<Tt58FinalMaterializedBooks['s
     columns: [
       'rowType', 'itemCode', 'itemName', 'unit', 'date', 'documentNumber', 'description',
       'quantity', 'direction', 'movementValueVnd', 'quantityBalance', 'valueBalanceVnd',
+      'valuationUnitCostVnd', 'recordedUnitCostVnd', 'valuationNote',
     ],
     rows,
   };
@@ -223,6 +243,7 @@ export function buildTt58ReportBundle(input: BuildTt58ReportInput): Tt58ReportBu
     }
   }
 
+  const s2c = input.materializedBooks.s2c;
   return {
     schemaVersion: 1,
     regime: input.profile.regime,
@@ -233,6 +254,15 @@ export function buildTt58ReportBundle(input: BuildTt58ReportInput): Tt58ReportBu
     incomeTaxMethod: input.profile.incomeTaxMethod,
     periodStart: input.period.start,
     periodEnd: input.period.end,
+    inventoryValuation: s2c ? {
+      method: s2c.valuationMethod,
+      sections: s2c.sections.map((section) => ({
+        itemId: section.itemId,
+        itemCode: section.itemCode,
+        closingQuantityMilli: section.closingQuantityMilli,
+        closingValueVnd: section.closingValueVnd,
+      })),
+    } : undefined,
     tables,
   };
 }

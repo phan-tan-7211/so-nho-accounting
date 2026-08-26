@@ -9,7 +9,13 @@ import type { ProjectionPeriod } from './accountingProjections';
 import { db, type AccountingDB } from './db';
 import { DexieAccountingCutoverStore } from './dexieAccountingCutoverStore';
 import { projectInventoryS2c } from './inventory';
-import type { InventoryItem, InventoryMovement, InventoryOpening } from './inventory';
+import type {
+  InventoryItem,
+  InventoryMovement,
+  InventoryOpening,
+  InventoryPriorValuationSnapshot,
+} from './inventory';
+import { findPriorInventoryValuation } from './inventoryValuationSnapshot';
 import {
   getTt58BookCapabilities,
   projectTt58CoreActivities,
@@ -32,6 +38,7 @@ export interface Tt58ProjectionSnapshotInput {
   inventoryItems: readonly InventoryItem[];
   inventoryOpenings: readonly InventoryOpening[];
   inventoryMovements: readonly InventoryMovement[];
+  priorInventoryValuation?: InventoryPriorValuationSnapshot;
   period: ProjectionPeriod;
 }
 
@@ -70,6 +77,7 @@ export function buildTt58ProjectionFromSnapshot(input: Tt58ProjectionSnapshotInp
       items: input.inventoryItems,
       openings: input.inventoryOpenings,
       movements: input.inventoryMovements,
+      priorValuation: input.priorInventoryValuation,
       period: input.period,
     });
   }
@@ -147,6 +155,7 @@ export class AccountingProjectionService {
         this.database.inventoryItems,
         this.database.inventoryOpenings,
         this.database.inventoryMovements,
+        this.database.periodLocks,
       ],
       async () => {
         const persistedState = await this.database.migrationStates.get(
@@ -169,6 +178,7 @@ export class AccountingProjectionService {
           inventoryItems,
           inventoryOpenings,
           inventoryMovements,
+          periodLocks,
         ] = await Promise.all([
           this.database.accounts.toArray(),
           this.database.transactions.toArray(),
@@ -180,6 +190,7 @@ export class AccountingProjectionService {
           this.database.inventoryItems.toArray(),
           this.database.inventoryOpenings.toArray(),
           this.database.inventoryMovements.toArray(),
+          this.database.periodLocks.where('status').equals('LOCKED').toArray(),
         ]);
 
         return buildTt58ProjectionFromSnapshot({
@@ -192,6 +203,7 @@ export class AccountingProjectionService {
           inventoryItems,
           inventoryOpenings,
           inventoryMovements,
+          priorInventoryValuation: findPriorInventoryValuation(periodLocks, period),
           period,
         });
       },

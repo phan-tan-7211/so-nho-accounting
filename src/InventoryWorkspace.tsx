@@ -137,13 +137,15 @@ export function InventoryWorkspace({
         date: timestampFromDate(movementDate),
         direction,
         quantityMilli,
-        unitCostVnd: parseVnd(unitCost),
+        unitCostVnd: direction === InventoryDirection.IN ? parseVnd(unitCost) : undefined,
         transactionId: linkedTransactionId || undefined,
         documentNumber: documentNumber.trim() || undefined,
         description: description.trim() || undefined,
       });
       setQuantity('1'); setUnitCost('0'); setDocumentNumber(''); setLinkedTransactionId(''); setDescription('');
-      setMessage('Đã ghi movement tồn kho; S2c đã được dựng lại từ subledger.');
+      setMessage(direction === InventoryDirection.IN
+        ? 'Đã ghi nhập kho với đơn giá thực tế; S2c đã được dựng lại.'
+        : 'Đã ghi xuất kho; đơn giá/thành tiền S2c được tính theo bình quân kỳ TT58.');
       await refreshAfterWrite();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không thể ghi movement tồn kho.');
@@ -155,7 +157,7 @@ export function InventoryWorkspace({
     setError(null); setMessage(null);
     try {
       await inventoryService.reverseMovement(movement.id);
-      setMessage('Đã tạo movement đảo, không xóa movement gốc.');
+      setMessage('Đã tạo movement đảo trong cùng tháng, không xóa movement gốc.');
       await refreshAfterWrite();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không thể đảo movement tồn kho.');
@@ -165,8 +167,11 @@ export function InventoryWorkspace({
   return (
     <section className="workspace-card inventory-workspace" aria-labelledby="inventory-title">
       <div className="workspace-heading compact-heading">
-        <div><strong id="inventory-title">Tồn kho · S2c-DNSN</strong><small>Không suy đoán FIFO/bình quân; mỗi movement dùng đơn giá VND explicit.</small></div>
-        <span className={`runtime-badge ${locked ? 'ready' : 'pending'}`}>{locked ? 'LOCKED' : 'SUBLEDGER'}</span>
+        <div>
+          <strong id="inventory-title">Tồn kho · S2c-DNSN</strong>
+          <small>Nhập kho dùng đơn giá thực tế. Xuất kho được định giá theo bình quân kỳ TT58 từ tồn đầu kỳ + nhập trong kỳ.</small>
+        </div>
+        <span className={`runtime-badge ${locked ? 'ready' : 'pending'}`}>{locked ? 'LOCKED' : 'TT58 AVG'}</span>
       </div>
       {locked ? <p className="form-alert warning">Kỳ đang khóa. UI và service đều chặn thay đổi tồn kho trong kỳ.</p> : null}
 
@@ -195,7 +200,15 @@ export function InventoryWorkspace({
           </div>
           <div className="form-grid three-columns">
             <label><span>Số lượng</span><input inputMode="decimal" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>
-            <label><span>Đơn giá VND</span><input inputMode="numeric" value={unitCost} onChange={(event) => setUnitCost(event.target.value)} /></label>
+            <label>
+              <span>{direction === InventoryDirection.IN ? 'Đơn giá nhập VND' : 'Đơn giá xuất VND'}</span>
+              <input
+                inputMode="numeric"
+                value={direction === InventoryDirection.IN ? unitCost : 'Tự tính bình quân kỳ'}
+                disabled={direction === InventoryDirection.OUT}
+                onChange={(event) => setUnitCost(event.target.value)}
+              />
+            </label>
             <label><span>Số chứng từ</span><input value={documentNumber} onChange={(event) => setDocumentNumber(event.target.value)} /></label>
           </div>
           <label><span>Liên kết giao dịch mua/bán/refund</span><select value={linkedTransactionId} onChange={(event) => setLinkedTransactionId(event.target.value)}><option value="">Không liên kết</option>{linkCandidates.map((tx) => <option key={tx.id} value={tx.id}>{tx.documentNumber ?? tx.invoiceNumber ?? tx.id.slice(0, 8)} · {tx.type}</option>)}</select><small>Liên kết chỉ để đối chiếu; movement không tự thay đổi Accounting Effects.</small></label>
@@ -210,7 +223,7 @@ export function InventoryWorkspace({
       {movements.length > 0 ? <div className="inventory-movement-list">{movements.slice(0, 20).map((movement) => (
         <div className="inventory-movement-row" key={movement.id}>
           <div><strong>{movement.direction === InventoryDirection.IN ? 'Nhập' : 'Xuất'} {formatInventoryQuantity(movement.quantityMilli)}</strong><small>{movement.documentNumber ?? movement.id.slice(0, 8)} · {movement.status}</small></div>
-          <span>{formatVnd(inventoryLineValueVnd(movement.quantityMilli, movement.unitCostVnd))}</span>
+          <span>{movement.direction === InventoryDirection.IN ? formatVnd(inventoryLineValueVnd(movement.quantityMilli, movement.unitCostVnd)) : 'Bình quân kỳ'}</span>
           {movement.status === 'POSTED' && !movement.reversalOfMovementId ? <button className="text-danger-button" disabled={locked} type="button" onClick={() => void reverseMovement(movement)}>Đảo</button> : null}
         </div>
       ))}</div> : null}
