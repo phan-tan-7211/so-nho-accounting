@@ -41,7 +41,10 @@ export function AccountManager() {
   }, []);
 
   useEffect(() => {
-    void reload().catch(() => setError('Không thể đọc danh sách tài khoản.'));
+    const timer = window.setTimeout(() => {
+      void reload().catch(() => setError('Không thể đọc danh sách tài khoản.'));
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [reload]);
 
   async function addAccount(event: FormEvent<HTMLFormElement>) {
