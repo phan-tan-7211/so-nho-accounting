@@ -46,7 +46,15 @@ const OUT_LINK_TYPES = new Set<Transaction['type']>([
   TransactionType.SUPPLIER_REFUND,
 ]);
 
-export function InventoryWorkspace({ periodStart, locked }: { periodStart: number; locked: boolean }) {
+export function InventoryWorkspace({
+  periodStart,
+  locked,
+  onChanged,
+}: {
+  periodStart: number;
+  locked: boolean;
+  onChanged: () => Promise<void>;
+}) {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -92,6 +100,11 @@ export function InventoryWorkspace({ periodStart, locked }: { periodStart: numbe
     return transactions.filter((tx) => tx.status === 'POSTED' && allowed.has(tx.type));
   }, [direction, transactions]);
 
+  async function refreshAfterWrite(): Promise<void> {
+    await reload();
+    await onChanged();
+  }
+
   async function createItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (locked) return;
@@ -105,7 +118,7 @@ export function InventoryWorkspace({ periodStart, locked }: { periodStart: numbe
       });
       setItemCode(''); setItemName(''); setOpeningQuantity('0'); setOpeningUnitCost('0');
       setMessage('Đã tạo item và opening tồn kho explicit.');
-      await reload();
+      await refreshAfterWrite();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không thể tạo item tồn kho.');
     } finally { setSaving(false); }
@@ -130,8 +143,8 @@ export function InventoryWorkspace({ periodStart, locked }: { periodStart: numbe
         description: description.trim() || undefined,
       });
       setQuantity('1'); setUnitCost('0'); setDocumentNumber(''); setLinkedTransactionId(''); setDescription('');
-      setMessage('Đã ghi movement tồn kho; S2c sẽ được dựng lại từ subledger.');
-      await reload();
+      setMessage('Đã ghi movement tồn kho; S2c đã được dựng lại từ subledger.');
+      await refreshAfterWrite();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không thể ghi movement tồn kho.');
     } finally { setSaving(false); }
@@ -143,7 +156,7 @@ export function InventoryWorkspace({ periodStart, locked }: { periodStart: numbe
     try {
       await inventoryService.reverseMovement(movement.id);
       setMessage('Đã tạo movement đảo, không xóa movement gốc.');
-      await reload();
+      await refreshAfterWrite();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Không thể đảo movement tồn kho.');
     }
