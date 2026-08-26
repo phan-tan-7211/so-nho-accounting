@@ -73,8 +73,11 @@ export const TransactionSchema = z.object({
   invoiceNumber: z.string().optional(),
 
   // Explicit TT58 book metadata. These values are never inferred from VAT invoice
-  // rates, cash direction or generic categories.
+  // rates, cash direction or generic categories. `taxRevenueAmount` is the explicit
+  // revenue tax base used by percentage-on-revenue books; it is intentionally not
+  // inferred from gross/net invoice amounts.
   taxActivityLabel: z.string().min(1).optional(),
+  taxRevenueAmount: z.number().int().nonnegative().optional(),
   vatRevenueRate: z.number().finite().min(0).max(100).optional(),
   incomeTaxRevenueRate: z.number().finite().min(0).max(100).optional(),
   vatDeductible: z.boolean().optional(),
