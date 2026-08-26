@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TT58_REGIME } from './accountingProfile';
 import type { AccountingProfile } from './accountingProfile';
+import { TT58_INVENTORY_VALUATION_METHOD } from './inventory';
 import type { Tt58RuntimeBookCapability } from './tt58CapabilityReadiness';
 import type { Tt58FinalMaterializedBooks } from './tt58TaxSettledBooks';
 import {
@@ -66,24 +67,26 @@ describe('TT58 deterministic report export', () => {
     expect(csv.endsWith('\r\n')).toBe(true);
   });
 
-  it('formats S2c quantities and values deterministically', () => {
+  it('formats S2c quantities and persists the TT58 valuation carry-forward', () => {
     const capability: Tt58RuntimeBookCapability = {
       code: 'S2c-DNSN', name: 'Sổ chi tiết vật liệu, dụng cụ, sản phẩm, hàng hóa', required: true,
       supplementary: false, status: 'IMPLEMENTED', blockers: [],
     };
     const books: Tt58FinalMaterializedBooks = {
       s2c: {
-        code: 'S2c-DNSN', status: 'IMPLEMENTED', issues: [],
+        code: 'S2c-DNSN', status: 'IMPLEMENTED', valuationMethod: TT58_INVENTORY_VALUATION_METHOD, issues: [],
         sections: [{
-          itemId: 'i1', itemCode: 'HH-01', itemName: 'Hàng A', unit: 'kg',
-          openingQuantityMilli: 1_500, openingValueVnd: 30_000,
+          itemId: '11111111-1111-4111-8111-111111111111', itemCode: 'HH-01', itemName: 'Hàng A', unit: 'kg',
+          valuationMethod: TT58_INVENTORY_VALUATION_METHOD,
+          openingQuantityMilli: 1_500, openingValueVnd: 30_000, periodAverageUnitCostVnd: 20_500,
           rows: [{
             movementId: 'm1', date: period.start + 1_000, documentNumber: 'NK-01', direction: 'IN',
-            quantityMilli: 500, unitCostVnd: 22_000, valueVnd: 11_000,
-            quantityBalanceMilli: 2_000, valueBalanceVnd: 41_000,
+            quantityMilli: 500, recordedUnitCostVnd: 22_000, unitCostVnd: 22_000, valueVnd: 11_000,
+            quantityBalanceMilli: 2_000, valueBalanceVnd: 41_000, reversal: false,
           }],
           inboundQuantityMilli: 500, inboundValueVnd: 11_000,
           outboundQuantityMilli: 0, outboundValueVnd: 0,
+          legacyExplicitOutboundValueVnd: 0, valuationAdjustmentVnd: 0,
           closingQuantityMilli: 2_000, closingValueVnd: 41_000,
         }],
       },
@@ -92,10 +95,18 @@ describe('TT58 deterministic report export', () => {
       profile: { ...profile, incomeTaxMethod: 'TAXABLE_INCOME' }, capabilities: [capability], materializedBooks: books, period,
     });
     expect(report.tables[0]?.code).toBe('S2c-DNSN');
+    expect(report.inventoryValuation).toEqual({
+      method: TT58_INVENTORY_VALUATION_METHOD,
+      sections: [{
+        itemId: '11111111-1111-4111-8111-111111111111', itemCode: 'HH-01',
+        closingQuantityMilli: 2_000, closingValueVnd: 41_000,
+      }],
+    });
     const csv = reportTableToCsv(report.tables[0]!);
     expect(csv).toContain('OPENING,HH-01,Hàng A,kg');
     expect(csv).toContain('1.5');
     expect(csv).toContain('41000');
+    expect(csv).toContain(TT58_INVENTORY_VALUATION_METHOD);
   });
 
   it('refuses to finalize a required book that is still partial or planned', () => {
