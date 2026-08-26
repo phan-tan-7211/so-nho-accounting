@@ -67,14 +67,14 @@ export const AccountingProfileSchema = z.object({
   const incomeTaxConfigured = profile.incomeTaxMethod !== 'UNCONFIGURED';
 
   if (!profile.taxProfileConfigured) {
-    if (vatConfigured || incomeConfigured) {
+    if (vatConfigured || incomeTaxConfigured) {
       ctx.addIssue({
         code: 'custom',
         path: ['taxProfileConfigured'],
         message: 'Khi hồ sơ thuế chưa xác nhận, cả hai phương pháp thuế phải ở trạng thái chưa cấu hình',
       });
     }
-  } else if (!vatConfigured || !incomeConfigured) {
+  } else if (!vatConfigured || !incomeTaxConfigured) {
     ctx.addIssue({
       code: 'custom',
       path: ['taxProfileConfigured'],
