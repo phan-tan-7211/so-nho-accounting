@@ -42,7 +42,7 @@ afterEach(async () => {
 const describeIndexedDb = process.env.CI === 'true' ? describe : describe.skip;
 
 describeIndexedDb('inventory S2c integration', () => {
-  it('persists explicit inventory, links compatible purchase, and materializes S2c', async () => {
+  it('persists explicit inventory, rejects pre-opening writes, links compatible purchase, and materializes S2c', async () => {
     const database = new AccountingDB(databaseName());
     await database.open();
     await database.accounts.put(account());
@@ -53,6 +53,13 @@ describeIndexedDb('inventory S2c integration', () => {
       code: 'HH-01', name: 'Hàng A', unit: 'kg', openingEffectiveDate: PERIOD.start,
       openingQuantityMilli: 5_000, openingUnitCostVnd: 10_000,
     });
+
+    await expect(inventory.postMovement({
+      itemId: item.id, date: 90, direction: InventoryDirection.IN, quantityMilli: 1_000,
+      unitCostVnd: 10_000, documentNumber: 'BEFORE-OPENING',
+    })).rejects.toThrow(/before the item opening date/);
+    expect(await database.inventoryMovements.count()).toBe(0);
+
     const engine = new AccountingEngineService(database);
     const purchase = await engine.processTransaction({
       date: 120, amount: 20_000, type: TransactionType.CASH_PURCHASE, sourceAccountId: CASH_ID,
