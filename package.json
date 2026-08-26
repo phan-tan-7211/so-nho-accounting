@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test": "vitest run",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "uiux:init": "npm exec --yes --package ui-ux-pro-max-cli -- uipro init --ai universal"
   },
   "dependencies": {
     "dexie": "^4.4.5",
