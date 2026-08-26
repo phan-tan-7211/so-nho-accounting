@@ -1,5 +1,5 @@
-import { TransactionType } from './models';
-import type { Transaction } from './models';
+import { TaxType, TransactionType } from './models';
+import type { TaxType as TaxTypeValue, Transaction } from './models';
 
 export const AccountingEffectKind = {
   CASH: 'CASH',
@@ -21,6 +21,7 @@ export interface AccountingEffect {
   amount: number;
   accountId?: string;
   partnerId?: string;
+  taxType?: TaxTypeValue;
 }
 
 export interface DeriveAccountingEffectsContext {
@@ -40,6 +41,12 @@ const LEGACY_AMBIGUOUS_TYPES = new Set<Transaction['type']>([
   TransactionType.ADJUSTMENT,
 ]);
 
+const TAX_EVENT_TYPES = new Set<Transaction['type']>([
+  TransactionType.TAX_PAYMENT,
+  TransactionType.TAX_REFUND,
+  TransactionType.TAX_ASSESSMENT,
+]);
+
 function assertVndInteger(value: number, field: string, allowZero = false): void {
   const valid = Number.isSafeInteger(value) && (allowZero ? value >= 0 : value > 0);
   if (!valid) {
@@ -54,6 +61,11 @@ function requireAccountId(value: string | undefined, label: string): string {
 
 function requirePartnerId(value: string | undefined, label: string): string {
   if (!value) throw new Error(`${label} is required`);
+  return value;
+}
+
+function requireTaxType(value: TaxTypeValue | undefined): TaxTypeValue {
+  if (!value) throw new Error('taxType is required');
   return value;
 }
 
@@ -109,6 +121,39 @@ function assertNoVatSettlementFields(tx: Transaction): void {
   }
 }
 
+function assertNoTaxFields(tx: Transaction): void {
+  if (
+    tx.taxType !== undefined ||
+    tx.taxPeriodStart !== undefined ||
+    tx.taxPeriodEnd !== undefined
+  ) {
+    throw new Error(`${tx.type} must not carry tax-settlement fields`);
+  }
+}
+
+function assertNoTaxAssessmentPeriod(tx: Transaction): void {
+  if (tx.taxPeriodStart !== undefined || tx.taxPeriodEnd !== undefined) {
+    throw new Error(`${tx.type} must not carry tax assessment period fields`);
+  }
+}
+
+function assertTaxAssessmentPeriod(tx: Transaction): void {
+  const start = tx.taxPeriodStart;
+  const end = tx.taxPeriodEnd;
+  if (
+    start === undefined ||
+    end === undefined ||
+    !Number.isFinite(start) ||
+    !Number.isFinite(end) ||
+    start > end
+  ) {
+    throw new Error('TAX_ASSESSMENT requires a valid taxPeriodStart and taxPeriodEnd');
+  }
+  if (tx.date < start || tx.date > end) {
+    throw new Error('TAX_ASSESSMENT date must fall inside its assessment period');
+  }
+}
+
 export function calculateVatAmount(baseAmount: number, vatRatePercent: number): number {
   assertVndInteger(baseAmount, 'baseAmount', true);
   if (!Number.isFinite(vatRatePercent) || vatRatePercent < 0) {
@@ -134,6 +179,10 @@ export function deriveAccountingEffects(
     throw new Error(
       `Legacy transaction type ${tx.type} requires explicit migration before accounting effects can be derived`,
     );
+  }
+
+  if (!TAX_EVENT_TYPES.has(tx.type) && tx.type !== TransactionType.REVERSAL) {
+    assertNoTaxFields(tx);
   }
 
   switch (tx.type) {
@@ -264,8 +313,49 @@ export function deriveAccountingEffects(
       return effects;
     }
 
-    case TransactionType.REVERSAL: {
+    case TransactionType.TAX_PAYMENT: {
       assertVndInteger(tx.amount, 'amount');
+      assertNoVatSettlementFields(tx);
+      assertNoTaxAssessmentPeriod(tx);
+      const taxType = requireTaxType(tx.taxType);
+      const sourceAccountId = requireAccountId(tx.sourceAccountId, 'sourceAccountId');
+      return [
+        { kind: AccountingEffectKind.CASH, amount: -tx.amount, accountId: sourceAccountId },
+        { kind: AccountingEffectKind.TAX, amount: -tx.amount, taxType },
+      ];
+    }
+
+    case TransactionType.TAX_REFUND: {
+      assertVndInteger(tx.amount, 'amount');
+      assertNoVatSettlementFields(tx);
+      assertNoTaxAssessmentPeriod(tx);
+      const taxType = requireTaxType(tx.taxType);
+      if (taxType !== TaxType.VAT) {
+        throw new Error('TAX_REFUND currently supports VAT only in V1');
+      }
+      const destinationAccountId = requireAccountId(
+        tx.destinationAccountId,
+        'destinationAccountId',
+      );
+      return [
+        { kind: AccountingEffectKind.CASH, amount: tx.amount, accountId: destinationAccountId },
+        { kind: AccountingEffectKind.TAX, amount: tx.amount, taxType },
+      ];
+    }
+
+    case TransactionType.TAX_ASSESSMENT: {
+      assertVndInteger(tx.amount, 'amount', true);
+      assertNoVatSettlementFields(tx);
+      const taxType = requireTaxType(tx.taxType);
+      if (taxType !== TaxType.INCOME_TAX) {
+        throw new Error('TAX_ASSESSMENT is reserved for INCOME_TAX under TAXABLE_INCOME');
+      }
+      assertTaxAssessmentPeriod(tx);
+      return [{ kind: AccountingEffectKind.TAX, amount: tx.amount, taxType }];
+    }
+
+    case TransactionType.REVERSAL: {
+      assertVndInteger(tx.amount, 'amount', true);
       assertNoVatSettlementFields(tx);
       if (!tx.reversalOfTransactionId) {
         throw new Error('reversalOfTransactionId is required');
