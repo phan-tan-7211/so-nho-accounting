@@ -11,6 +11,7 @@ import {
   getTt58BookCapabilities,
   projectTt58CoreActivities,
 } from './tt58BookProjections';
+import { applyMaterializedBookReadiness } from './tt58CapabilityReadiness';
 import { materializeTt58Books } from './tt58MaterializedBooks';
 
 export class AccountingProjectionService {
@@ -104,10 +105,14 @@ export class AccountingProjectionService {
           legacyTransactionIds: persistedState.legacyTransactionIds,
           period,
         });
+        const capabilities = applyMaterializedBookReadiness(
+          getTt58BookCapabilities(profile),
+          materializedBooks,
+        );
 
         return {
           profile,
-          capabilities: getTt58BookCapabilities(profile),
+          capabilities,
           projection,
           activities: projectTt58CoreActivities(projection),
           materializedBooks,
