@@ -1,0 +1,359 @@
+.workspace-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.workspace-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.workspace-heading h2 {
+  margin: 4px 0;
+  font-size: 22px;
+  line-height: 28px;
+}
+
+.workspace-heading p {
+  margin: 3px 0 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.compact-heading {
+  align-items: center;
+}
+
+.compact-heading small {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.workspace-card,
+.capability-card,
+.tax-summary-card {
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-1);
+}
+
+.workspace-card > .section-heading:first-child {
+  margin-top: -4px;
+}
+
+.transaction-form,
+.compact-form {
+  display: grid;
+  gap: 12px;
+}
+
+.transaction-form label,
+.compact-form label,
+.workspace-card > label,
+.month-control {
+  display: grid;
+  gap: 5px;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.transaction-form label small,
+.compact-form label small,
+.workspace-card label small {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 17px;
+  font-weight: 500;
+}
+
+.transaction-form input,
+.transaction-form select,
+.compact-form input,
+.compact-form select,
+.workspace-card input,
+.workspace-card select,
+.month-control input,
+.account-row select {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 11px;
+  border: 1px solid var(--color-border);
+  border-radius: 11px;
+  box-sizing: border-box;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.transaction-form input:focus-visible,
+.transaction-form select:focus-visible,
+.compact-form input:focus-visible,
+.compact-form select:focus-visible,
+.workspace-card input:focus-visible,
+.workspace-card select:focus-visible,
+.month-control input:focus-visible,
+.account-row select:focus-visible {
+  border-color: var(--color-primary);
+  outline: 3px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
+  outline-offset: 1px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.two-columns,
+.three-columns {
+  grid-template-columns: 1fr;
+}
+
+.inline-fieldset {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  margin: 2px 0;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 13px;
+}
+
+.inline-fieldset legend {
+  padding: 0 5px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.primary-button.compact {
+  min-height: 42px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+.secondary-button {
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+  border-radius: 12px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font: inherit;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.secondary-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.text-danger-button {
+  min-height: 38px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--color-danger);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.transaction-row--static {
+  cursor: default;
+}
+
+.muted-count,
+.empty-copy,
+.ready-copy,
+.book-total {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.empty-copy,
+.book-total {
+  margin: 4px 0;
+  line-height: 19px;
+}
+
+.account-list {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.account-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(145px, 0.8fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.account-row:last-child {
+  border-bottom: 0;
+}
+
+.account-row strong,
+.account-row small {
+  display: block;
+}
+
+.account-row small {
+  margin-top: 2px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.runtime-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.runtime-badge.ready {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.runtime-badge.pending {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.runtime-badge.planned {
+  background: var(--color-surface-soft);
+  color: var(--color-text-muted);
+}
+
+.month-control {
+  width: 145px;
+  flex: 0 0 auto;
+}
+
+.capability-grid,
+.tax-summary-grid,
+.book-detail-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.capability-card p {
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.blocker-list {
+  margin: 9px 0 0;
+  padding-left: 18px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.metric-grid div {
+  min-width: 0;
+  padding: 10px;
+  border-radius: 11px;
+  background: var(--color-surface-soft);
+}
+
+.metric-grid span,
+.metric-grid strong {
+  display: block;
+}
+
+.metric-grid span {
+  color: var(--color-text-muted);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.metric-grid strong {
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.book-group,
+.money-section {
+  display: grid;
+  gap: 3px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 12px;
+}
+
+.book-group:last-child,
+.money-section:last-child {
+  border-bottom: 0;
+}
+
+.book-group small,
+.money-section small {
+  color: var(--color-text-muted);
+}
+
+.money-section > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+@media (min-width: 600px) {
+  .two-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .three-columns {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .capability-grid,
+  .tax-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .workspace-heading:not(.compact-heading) {
+    flex-direction: column;
+  }
+
+  .month-control {
+    width: 100%;
+  }
+
+  .account-row {
+    grid-template-columns: 1fr;
+  }
+}
