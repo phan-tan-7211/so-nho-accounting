@@ -42,7 +42,7 @@ afterEach(async () => {
 const describeIndexedDb = process.env.CI === 'true' ? describe : describe.skip;
 
 describeIndexedDb('full database backup and restore', () => {
-  it('round-trips V7 data with a verified SHA-256 checksum', async () => {
+  it('round-trips V7 data with a verified SHA-256 checksum and preview summary', async () => {
     const source = new AccountingDB(databaseName());
     const target = new AccountingDB(databaseName());
     await source.open();
@@ -52,10 +52,27 @@ describeIndexedDb('full database backup and restore', () => {
     await source.accountingProfiles.put(profile);
     const partner = await new PartnerService(source).create({ code: 'KH-01', name: 'Khách A', kind: PartnerKind.CUSTOMER });
 
-    const json = await new DataBackupService(source).exportJson(123456);
-    const verified = await new DataBackupService(source).verifyJson(json);
+    const service = new DataBackupService(source);
+    const json = await service.exportJson(123456);
+    const verified = await service.verifyJson(json);
     expect(verified.envelope.createdAt).toBe(123456);
     expect(verified.envelope.checksumSha256).toMatch(/^[a-f0-9]{64}$/);
+
+    const preview = await service.previewJson(json);
+    expect(preview).toMatchObject({
+      createdAt: 123456,
+      databaseVersion: 7,
+      counts: {
+        accounts: 1,
+        accountingProfiles: 1,
+        partners: 1,
+        transactions: 0,
+        inventoryItems: 0,
+      },
+      lockedPeriods: 0,
+    });
+    expect(preview.totalRecords).toBe(3);
+    expect(preview.checksumSha256).toBe(verified.envelope.checksumSha256);
 
     await target.accounts.put(account('22222222-2222-4222-8222-222222222222', 'Sentinel'));
     await new DataBackupService(target).restoreJson(json);
@@ -67,7 +84,7 @@ describeIndexedDb('full database backup and restore', () => {
     target.close();
   });
 
-  it('rejects checksum tampering before replacing current data', async () => {
+  it('rejects checksum tampering before preview or replacement of current data', async () => {
     const source = new AccountingDB(databaseName());
     const target = new AccountingDB(databaseName());
     await source.open();
@@ -76,10 +93,13 @@ describeIndexedDb('full database backup and restore', () => {
     const json = await new DataBackupService(source).exportJson(1);
     const tampered = JSON.parse(json) as { data: { accounts: Array<{ name: string }> } };
     tampered.data.accounts[0]!.name = 'Đã sửa';
+    const tamperedJson = JSON.stringify(tampered);
     const sentinel = account('22222222-2222-4222-8222-222222222222', 'Sentinel');
     await target.accounts.put(sentinel);
 
-    await expect(new DataBackupService(target).restoreJson(JSON.stringify(tampered))).rejects.toThrow(/checksum/);
+    const targetService = new DataBackupService(target);
+    await expect(targetService.previewJson(tamperedJson)).rejects.toThrow(/checksum/);
+    await expect(targetService.restoreJson(tamperedJson)).rejects.toThrow(/checksum/);
     expect(await target.accounts.toArray()).toEqual([sentinel]);
     source.close();
     target.close();

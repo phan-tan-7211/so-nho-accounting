@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react';
-import { AccountingSettings } from './AccountingSettings';
-import { BooksWorkspace } from './BooksWorkspace';
-import { OverviewDashboard } from './OverviewDashboard';
-import { TransactionWorkspace } from './TransactionWorkspace';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { TransactionType } from './models';
 import type { TransactionType as TransactionTypeValue } from './models';
 import './App.css';
 import './Workspace.css';
+
+const AccountingSettings = lazy(() => import('./AccountingSettings').then((module) => ({ default: module.AccountingSettings })));
+const BooksWorkspace = lazy(() => import('./BooksWorkspace').then((module) => ({ default: module.BooksWorkspace })));
+const OverviewDashboard = lazy(() => import('./OverviewDashboard').then((module) => ({ default: module.OverviewDashboard })));
+const TransactionWorkspace = lazy(() => import('./TransactionWorkspace').then((module) => ({ default: module.TransactionWorkspace })));
 
 type NavKey = 'overview' | 'transactions' | 'books' | 'settings';
 
@@ -29,6 +30,14 @@ function Icon({ name, size = 22 }: { name: IconName; size?: number }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       {paths[name]}
     </svg>
+  );
+}
+
+function WorkspaceFallback() {
+  return (
+    <section className="workspace-card" role="status" aria-live="polite">
+      <p className="empty-copy">Đang mở dữ liệu…</p>
+    </section>
   );
 }
 
@@ -63,18 +72,20 @@ function App() {
       </header>
 
       <main className="main-content" id="main-content">
-        {activeNav === 'overview' ? (
-          <OverviewDashboard
-            onQuickTransaction={openTransaction}
-            onOpenTransactions={() => setActiveNav('transactions')}
-          />
-        ) : activeNav === 'transactions' ? (
-          <TransactionWorkspace requestedType={requestedType} requestToken={requestToken} />
-        ) : activeNav === 'books' ? (
-          <BooksWorkspace />
-        ) : (
-          <AccountingSettings />
-        )}
+        <Suspense fallback={<WorkspaceFallback />}>
+          {activeNav === 'overview' ? (
+            <OverviewDashboard
+              onQuickTransaction={openTransaction}
+              onOpenTransactions={() => setActiveNav('transactions')}
+            />
+          ) : activeNav === 'transactions' ? (
+            <TransactionWorkspace requestedType={requestedType} requestToken={requestToken} />
+          ) : activeNav === 'books' ? (
+            <BooksWorkspace />
+          ) : (
+            <AccountingSettings />
+          )}
+        </Suspense>
       </main>
 
       {quickOpen ? (

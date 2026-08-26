@@ -73,6 +73,8 @@ export interface BackupData {
   partners: unknown[];
 }
 
+export type BackupTableName = keyof BackupData;
+
 export interface BackupEnvelope {
   format: typeof BACKUP_FORMAT;
   formatVersion: typeof BACKUP_FORMAT_VERSION;
@@ -80,6 +82,16 @@ export interface BackupEnvelope {
   createdAt: number;
   data: BackupData;
   checksumSha256: string;
+}
+
+export interface BackupPreview {
+  formatVersion: typeof BACKUP_FORMAT_VERSION;
+  databaseVersion: typeof CURRENT_DATABASE_VERSION;
+  createdAt: number;
+  checksumSha256: string;
+  counts: Record<BackupTableName, number>;
+  totalRecords: number;
+  lockedPeriods: number;
 }
 
 interface ParsedBackupData {
@@ -165,6 +177,33 @@ const BackupEnvelopeInputSchema = z.object({
   checksumSha256: z.string().regex(/^[a-f0-9]{64}$/),
 });
 
+function buildPreview(envelope: BackupEnvelope, parsed: ParsedBackupData): BackupPreview {
+  const counts: Record<BackupTableName, number> = {
+    accounts: parsed.accounts.length,
+    transactions: parsed.transactions.length,
+    auditLogs: parsed.auditLogs.length,
+    accountingProfiles: parsed.accountingProfiles.length,
+    openingEffects: parsed.openingEffects.length,
+    migrationStates: parsed.migrationStates.length,
+    taxOpeningPositions: parsed.taxOpeningPositions.length,
+    periodLocks: parsed.periodLocks.length,
+    periodLockEvents: parsed.periodLockEvents.length,
+    inventoryItems: parsed.inventoryItems.length,
+    inventoryOpenings: parsed.inventoryOpenings.length,
+    inventoryMovements: parsed.inventoryMovements.length,
+    partners: parsed.partners.length,
+  };
+  return {
+    formatVersion: envelope.formatVersion,
+    databaseVersion: envelope.databaseVersion,
+    createdAt: envelope.createdAt,
+    checksumSha256: envelope.checksumSha256,
+    counts,
+    totalRecords: Object.values(counts).reduce((sum, value) => sum + value, 0),
+    lockedPeriods: parsed.periodLocks.filter((record) => record.status === 'LOCKED').length,
+  };
+}
+
 export class DataBackupService {
   private readonly database: AccountingDB;
 
@@ -234,6 +273,11 @@ export class DataBackupService {
     const actual = await sha256Hex(canonicalBackupPayload(unsigned));
     if (actual !== envelope.checksumSha256) throw new Error('Backup checksum does not match; file may be corrupted or modified');
     return { envelope, parsed: parseBackupData(envelope.data) };
+  }
+
+  async previewJson(json: string): Promise<BackupPreview> {
+    const { envelope, parsed } = await this.verifyJson(json);
+    return buildPreview(envelope, parsed);
   }
 
   async restoreJson(json: string): Promise<BackupEnvelope> {
