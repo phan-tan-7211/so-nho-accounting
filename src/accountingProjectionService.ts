@@ -24,9 +24,19 @@ import { applyMaterializedBookReadiness } from './tt58CapabilityReadiness';
 import { materializeTt58Books } from './tt58MaterializedBooks';
 import type { OpeningEffectRecord } from './accountingCutoverPersistence';
 import type { Account, Transaction } from './models';
+import type { Partner } from './partners';
 import type { TaxOpeningPosition } from './taxOpeningPosition';
 import { projectTt58TaxSettlements } from './taxSettlement';
 import { finalizeTt58BooksWithTaxSettlement } from './tt58TaxSettledBooks';
+import {
+  projectTt58SupplementaryBooks,
+} from './tt58Supplementary';
+import type {
+  FixedAsset,
+  OtherTaxEntry,
+  SupplementaryDebtEntry,
+  SupplementaryEquityEntry,
+} from './tt58Supplementary';
 
 export interface Tt58ProjectionSnapshotInput {
   profile: AccountingProfile;
@@ -39,6 +49,11 @@ export interface Tt58ProjectionSnapshotInput {
   inventoryOpenings: readonly InventoryOpening[];
   inventoryMovements: readonly InventoryMovement[];
   priorInventoryValuation?: InventoryPriorValuationSnapshot;
+  partners?: readonly Partner[];
+  supplementaryDebtEntries?: readonly SupplementaryDebtEntry[];
+  fixedAssets?: readonly FixedAsset[];
+  otherTaxEntries?: readonly OtherTaxEntry[];
+  supplementaryEquityEntries?: readonly SupplementaryEquityEntry[];
   period: ProjectionPeriod;
 }
 
@@ -81,6 +96,22 @@ export function buildTt58ProjectionFromSnapshot(input: Tt58ProjectionSnapshotInp
       period: input.period,
     });
   }
+
+  const supplementary = projectTt58SupplementaryBooks({
+    transactions: input.transactions,
+    legacyTransactionIds: input.legacyTransactionIds,
+    partners: input.partners ?? [],
+    debtEntries: input.supplementaryDebtEntries ?? [],
+    fixedAssets: input.fixedAssets ?? [],
+    otherTaxEntries: input.otherTaxEntries ?? [],
+    equityEntries: input.supplementaryEquityEntries ?? [],
+    period: input.period,
+  });
+  materializedBooks.s4a = supplementary.s4a;
+  materializedBooks.s4b = supplementary.s4b;
+  materializedBooks.s4c = supplementary.s4c;
+  materializedBooks.s4d = supplementary.s4d;
+
   const capabilities = applyMaterializedBookReadiness(
     getTt58BookCapabilities(input.profile),
     materializedBooks,
@@ -92,6 +123,7 @@ export function buildTt58ProjectionFromSnapshot(input: Tt58ProjectionSnapshotInp
     projection,
     activities: projectTt58CoreActivities(projection),
     taxSettlements,
+    supplementary,
     materializedBooks,
   };
 }
@@ -155,6 +187,11 @@ export class AccountingProjectionService {
         this.database.inventoryItems,
         this.database.inventoryOpenings,
         this.database.inventoryMovements,
+        this.database.partners,
+        this.database.supplementaryDebtEntries,
+        this.database.fixedAssets,
+        this.database.otherTaxEntries,
+        this.database.supplementaryEquityEntries,
         this.database.periodLocks,
       ],
       async () => {
@@ -178,6 +215,11 @@ export class AccountingProjectionService {
           inventoryItems,
           inventoryOpenings,
           inventoryMovements,
+          partners,
+          supplementaryDebtEntries,
+          fixedAssets,
+          otherTaxEntries,
+          supplementaryEquityEntries,
           periodLocks,
         ] = await Promise.all([
           this.database.accounts.toArray(),
@@ -190,6 +232,11 @@ export class AccountingProjectionService {
           this.database.inventoryItems.toArray(),
           this.database.inventoryOpenings.toArray(),
           this.database.inventoryMovements.toArray(),
+          this.database.partners.toArray(),
+          this.database.supplementaryDebtEntries.toArray(),
+          this.database.fixedAssets.toArray(),
+          this.database.otherTaxEntries.toArray(),
+          this.database.supplementaryEquityEntries.toArray(),
           this.database.periodLocks.where('status').equals('LOCKED').toArray(),
         ]);
 
@@ -204,6 +251,11 @@ export class AccountingProjectionService {
           inventoryOpenings,
           inventoryMovements,
           priorInventoryValuation: findPriorInventoryValuation(periodLocks, period),
+          partners,
+          supplementaryDebtEntries,
+          fixedAssets,
+          otherTaxEntries,
+          supplementaryEquityEntries,
           period,
         });
       },
