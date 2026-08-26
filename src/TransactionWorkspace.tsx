@@ -29,9 +29,29 @@ const EXPENSE_LABELS: Readonly<Record<string, string>> = {
   [Tt58ExpenseCategory.OTHER_DIRECT_BUSINESS]: 'Chi phí kinh doanh trực tiếp khác',
 };
 
+const POSITIVE_TYPES = new Set<Transaction['type']>([
+  TransactionType.CASH_SALE,
+  TransactionType.CUSTOMER_PAYMENT,
+  TransactionType.SUPPLIER_REFUND,
+  TransactionType.CAPITAL_CONTRIBUTION,
+  TransactionType.TAX_REFUND,
+]);
+const NEGATIVE_TYPES = new Set<Transaction['type']>([
+  TransactionType.CASH_PURCHASE,
+  TransactionType.SUPPLIER_PAYMENT,
+  TransactionType.CUSTOMER_REFUND,
+  TransactionType.TAX_PAYMENT,
+]);
+const LEGACY_TYPES = new Set<Transaction['type']>([
+  TransactionType.INCOME,
+  TransactionType.EXPENSE,
+  TransactionType.REFUND,
+  TransactionType.ADJUSTMENT,
+]);
+
 function transactionTone(tx: Transaction): 'positive' | 'negative' | 'neutral' {
-  if ([TransactionType.CASH_SALE, TransactionType.CUSTOMER_PAYMENT, TransactionType.SUPPLIER_REFUND, TransactionType.CAPITAL_CONTRIBUTION, TransactionType.TAX_REFUND].includes(tx.type)) return 'positive';
-  if ([TransactionType.CASH_PURCHASE, TransactionType.SUPPLIER_PAYMENT, TransactionType.CUSTOMER_REFUND, TransactionType.TAX_PAYMENT].includes(tx.type)) return 'negative';
+  if (POSITIVE_TYPES.has(tx.type)) return 'positive';
+  if (NEGATIVE_TYPES.has(tx.type)) return 'negative';
   return 'neutral';
 }
 
@@ -75,7 +95,7 @@ export function TransactionWorkspace({
 
   useEffect(() => {
     if (!requestedType || requestToken === undefined) return;
-    setDraft((current) => ({ ...createEmptyTransactionDraft(), type: requestedType }));
+    setDraft({ ...createEmptyTransactionDraft(), type: requestedType });
     setShowForm(true);
     setError(null);
     setMessage(null);
@@ -268,7 +288,7 @@ export function TransactionWorkspace({
           <div className="transaction-list">
             {transactions.map((tx) => {
               const tone = transactionTone(tx);
-              const legacy = [TransactionType.INCOME, TransactionType.EXPENSE, TransactionType.REFUND, TransactionType.ADJUSTMENT].includes(tx.type);
+              const legacy = LEGACY_TYPES.has(tx.type);
               return (
                 <div className="transaction-row transaction-row--static" key={tx.id}>
                   <span className={`transaction-marker ${tone}`} aria-hidden="true"></span>
